@@ -1,0 +1,1771 @@
+```html
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>توليد استمارة التقرير</title>
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap"
+        rel="stylesheet"
+    >
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+            font-family: 'Cairo', Tahoma, sans-serif;
+        }
+
+        body {
+            background: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        }
+
+        h1 {
+            text-align: center;
+            color: #1e3a8a;
+            margin-bottom: 25px;
+            font-size: 24px;
+        }
+
+        h3 {
+            color: #1e3a8a;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .full-width {
+            grid-column: span 2;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-weight: 600;
+            margin-bottom: 6px;
+            font-size: 14px;
+            color: #4b5563;
+        }
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 15px;
+            background: #fff;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 2px #bfdbfe;
+        }
+
+        input[readonly] {
+            background: #f3f4f6;
+        }
+
+        .btn {
+            background: #2563eb;
+            color: #fff;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        .btn:hover {
+            background: #1d4ed8;
+        }
+
+        .btn:disabled {
+            background: #93c5fd;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-top: 15px;
+            text-align: center;
+            font-weight: 600;
+            min-height: 25px;
+        }
+
+        /* =====================================================
+           SEARCH
+        ===================================================== */
+
+        .search-box {
+            margin-top: 35px;
+            padding: 20px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+        }
+
+        .search-row {
+            display: flex;
+            gap: 10px;
+            align-items: stretch;
+        }
+
+        .search-row input {
+            flex: 1;
+            margin: 0;
+        }
+
+        .search-btn {
+            background: #16a34a;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 25px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 15px;
+        }
+
+        .search-btn:hover {
+            background: #15803d;
+        }
+
+        .search-btn:disabled {
+            background: #86efac;
+            cursor: not-allowed;
+        }
+
+        .search-result {
+            margin-top: 15px;
+        }
+
+        .result-card {
+            background: white;
+            border: 1px solid #dbeafe;
+            border-radius: 10px;
+            padding: 18px;
+            line-height: 2;
+        }
+
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            border-bottom: 1px solid #f1f5f9;
+            padding: 4px 0;
+        }
+
+        .result-label {
+            font-weight: 700;
+            color: #475569;
+        }
+
+        .result-value {
+            color: #111827;
+        }
+
+        .pdf-open-btn {
+            display: inline-block;
+            background: #16a34a;
+            color: white;
+            padding: 9px 18px;
+            border-radius: 7px;
+            text-decoration: none;
+            font-weight: 700;
+            margin-top: 12px;
+        }
+
+        .pdf-open-btn:hover {
+            background: #15803d;
+        }
+
+        .error-message {
+            color: #dc2626;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            padding: 10px;
+            border-radius: 7px;
+            font-weight: 600;
+        }
+
+        .success-message {
+            color: #15803d;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            padding: 10px;
+            border-radius: 7px;
+            font-weight: 600;
+        }
+
+        .loading-message {
+            color: #2563eb;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            padding: 10px;
+            border-radius: 7px;
+            font-weight: 600;
+        }
+
+        /* =====================================================
+           PDF LIST
+        ===================================================== */
+
+        .pdf-list {
+            margin-top: 35px;
+            border-top: 2px solid #e5e7eb;
+            padding-top: 20px;
+        }
+
+        .pdf-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+            background: #f8fafc;
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .pdf-item span {
+            word-break: break-word;
+        }
+
+        .pdf-item a {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .pdf-item a:hover {
+            text-decoration: underline;
+        }
+
+        .local-file-btn {
+            border: none;
+            background: #2563eb;
+            color: #fff;
+            padding: 9px 18px;
+            border-radius: 7px;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .local-file-btn:hover {
+            background: #1d4ed8;
+        }
+
+        /* =====================================================
+           FILE NUMBER HIGHLIGHT
+        ===================================================== */
+
+        .file-number-input {
+            border: 2px solid #2563eb !important;
+            background: #eff6ff !important;
+            font-weight: 700;
+            direction: ltr;
+            text-align: left;
+        }
+
+        .file-number-help {
+            margin-top: 5px;
+            color: #64748b;
+            font-size: 12px;
+        }
+
+        /* =====================================================
+           PHOTO HELP
+        ===================================================== */
+
+        .photo-help {
+            margin-top: 5px;
+            color: #64748b;
+            font-size: 12px;
+        }
+
+        /* =====================================================
+           RESPONSIVE
+        ===================================================== */
+
+        @media (max-width: 700px) {
+
+            body {
+                padding: 10px;
+            }
+
+            .container {
+                padding: 18px;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .full-width {
+                grid-column: span 1;
+            }
+
+            .search-row {
+                flex-direction: column;
+            }
+
+            .search-btn {
+                width: 100%;
+            }
+
+            .pdf-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .result-row {
+                flex-direction: column;
+                gap: 0;
+            }
+        }
+
+    </style>
+</head>
+
+
+<body>
+
+<div class="container">
+
+    <!-- =====================================================
+         TITLE
+    ====================================================== -->
+
+    <h1>
+        استمارة تقرير اليتيم
+    </h1>
+
+
+    <!-- =====================================================
+         MAIN FORM
+    ====================================================== -->
+
+    <form
+        id="reportForm"
+        enctype="multipart/form-data"
+    >
+
+        <div class="form-grid">
+
+
+            <!-- =================================================
+                 COUNTRY
+            ================================================== -->
+
+            <div class="form-group">
+
+                <label>
+                    الدولة (Мамлекет)
+                </label>
+
+                <input
+                    type="text"
+                    name="country"
+                    value="قرغيزستان"
+                    readonly
+                    style="
+                        background:#f3f4f6;
+                        font-weight:bold;
+                    "
+                >
+
+            </div>
+
+
+            <!-- =================================================
+                 FILE NUMBER
+            ================================================== -->
+
+            <div class="form-group">
+
+                <label>
+                    رقم الملف (Файл №)
+                </label>
+
+                <input
+                    type="text"
+                    name="file_number"
+                    id="fileNumber"
+                    class="file-number-input"
+                    placeholder="مثال: 00125"
+                    required
+                    autocomplete="off"
+                >
+
+                <div class="file-number-help">
+                    Файл № сайттагы катталган адамды табуу үчүн колдонулат.
+                </div>
+
+            </div>
+
+
+            <!-- =================================================
+                 SPONSOR
+            ================================================== -->
+
+            <div class="form-group">
+
+                <label>
+                    اسم الكافل (Кафилдин аты)
+                </label>
+
+                <input
+                    type="text"
+                    name="sponsor"
+                    placeholder="اسم الكافل"
+                >
+
+            </div>
+
+
+            <!-- =================================================
+                 BENEFICIARY
+            ================================================== -->
+
+            <div class="form-group">
+
+                <label>
+                    اسم اليتيم (Жетимдин аты)
+                </label>
+
+                <input
+                    type="text"
+                    name="beneficiary"
+                    placeholder="اسم اليتيم"
+                >
+
+            </div>
+
+
+            <!-- =================================================
+                 BENEFICIARY NUMBER
+            ================================================== -->
+
+            <div class="form-group">
+
+                <label>
+                   رقم الكافل(кафилдин номери)
+                </label>
+
+                <input
+                    type="text"
+                    name="beneficiary_number"
+                    placeholder="رقم الكافل"
+                >
+
+            </div>
+
+
+            <!-- =================================================
+                 INTERNAL NUMBER
+            ================================================== -->
+
+            <div class="form-group">
+
+                <label>
+                    الرقم الداخلي (Ички номери)
+                </label>
+
+                <input
+                    type="text"
+                    name="internal_number"
+                    placeholder="الرقم الداخلي"
+                >
+
+            </div>
+
+
+            <!-- =================================================
+                 BIRTH DATE
+            ================================================== -->
+
+            <div class="form-group">
+
+                <label>
+                    تاريخ الميلاد (Туулган жылы/күнү)
+                </label>
+
+                <input
+                    type="text"
+                    name="birth_date"
+                    placeholder="DD/MM/YYYY"
+                >
+
+            </div>
+
+
+            <!-- =================================================
+                 GENDER
+            ================================================== -->
+
+            <div class="form-group">
+
+                <label>
+                    الجنس (Жынысы)
+                </label>
+
+                <select name="gender">
+
+                    <option value="ذكر">
+                        ذكر (Эркек)
+                    </option>
+
+                    <option value="أنثى">
+                        أنثى (Кыз)
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <!-- =================================================
+                 HEALTH
+            ================================================== -->
+
+            <div class="form-group">
+
+                <label>
+                    الحالة الصحية (Ден соолугу)
+                </label>
+
+                <select name="health">
+
+                    <option value="جيد">
+                        جيد (Жакшы)
+                    </option>
+
+                    <option value="ضعف البصر">
+                        ضعف البصر (Көзү начар көрөт)
+                    </option>
+
+                    <option value="أمراض القلب">
+                        أمراض القلب (Жүрөк оорусу)
+                    </option>
+
+                    <option value="حساسية">
+                        حساسية (Аллергия)
+                    </option>
+
+                    <option value="مرض السكري">
+                        مرض السكري (Кант диабети)
+                    </option>
+
+                    <option value="الربو">
+                        الربو (Астма)
+                    </option>
+
+                    <option value="إعاقة حركية">
+                        إعاقة حركية (Кыймылдоо мүмкүнчүлүгү чектелген)
+                    </option>
+
+                    <option value="مريض">
+                        مريض (Оорулуу)
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <!-- =================================================
+                 CLASS
+            ================================================== -->
+
+            <div class="form-group">
+
+                <label>
+                    أدرس في الصف (Классты тандоо)
+                </label>
+
+                <select name="class_name">
+
+                    <option value="لايدرس">
+                        لا يدرس (окубайт)
+                    </option>
+
+                    <option value="الأول">
+                        الأول (1-класс)
+                    </option>
+
+                    <option value="الثاني">
+                        الثاني (2-класс)
+                    </option>
+
+                    <option value="الثالث">
+                        الثالث (3-класс)
+                    </option>
+
+                    <option value="الرابع">
+                        الرابع (4-класс)
+                    </option>
+
+                    <option value="الخامس">
+                        الخامس (5-класс)
+                    </option>
+
+                    <option value="السادس">
+                        السادس (6-класс)
+                    </option>
+
+                    <option value="السابع">
+                        السابع (7-класс)
+                    </option>
+
+                    <option value="الثامن">
+                        الثامن (8-класс)
+                    </option>
+
+                    <option value="التاسع">
+                        التاسع (9-класс)
+                    </option>
+
+                    <option value="العاشر">
+                        العاشر (10-класс)
+                    </option>
+
+                    <option value="الحادي عشر">
+                        الحادي عشر (11-класс)
+                    </option>
+
+                    <option value="طالب جامعي">
+                        طالب جامعي (Студент)
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <!-- =================================================
+                 FUTURE WISH
+            ================================================== -->
+
+            <div class="form-group">
+
+                <label>
+                    أمنية المستقبل (Келечектеги кыялы)
+                </label>
+
+                <input
+                    type="text"
+                    name="future_wish"
+                    placeholder="مثال: طبيب، مهندس، معلم"
+                >
+
+            </div>
+
+
+            <!-- =================================================
+                 IMPACT
+            ================================================== -->
+
+            <div class="form-group full-width">
+
+                <label>
+                    أثر الكفالة على حياة اليتيم
+                    (Кафалаттын жетимдин жашоосуна таасири)
+                </label>
+
+                <textarea
+                    name="impact"
+                    rows="3"
+                    placeholder="أثر الكفالة..."
+                ></textarea>
+
+            </div>
+
+
+            <!-- =================================================
+                 NOTES
+            ================================================== -->
+
+            <div class="form-group full-width">
+
+                <label>
+                    ملاحظات المشرف
+                    (Мушрифтин эскертүүсү)
+                </label>
+
+                <textarea
+                    name="notes"
+                    rows="3"
+                    placeholder="ملاحظات المشرف..."
+                ></textarea>
+
+            </div>
+
+
+            <!-- =================================================
+                 LINK
+            ================================================== -->
+
+            <div class="form-group full-width">
+
+                <label>
+                    رابط الفيديو / الملف
+                    (Шилтеме - QR код үчүн)
+                </label>
+
+                <input
+                    type="text"
+                    name="link"
+                    placeholder="https://..."
+                >
+
+            </div>
+
+
+            <!-- =================================================
+                 PHOTO 10
+            ================================================== -->
+
+            <div class="form-group">
+
+                <label>
+                    الصورة الشخصية
+                    (Жеке сүрөтү - photo10)
+                </label>
+
+                <input
+                    type="file"
+                    name="photo10"
+                    id="photo10"
+                    accept="image/*"
+                >
+
+                <div class="photo-help">
+                    Сүрөт автоматтык түрдө 4×6 форматка даярдалып,
+                    адамдын жүзү мүмкүн болушунча ортого жайгаштырылат.
+                </div>
+
+            </div>
+
+
+            <!-- =================================================
+                 PHOTO 1
+            ================================================== -->
+
+            <div class="form-group">
+
+                <label>
+                    الصورة 1 (Сүрөт 1)
+                </label>
+
+                <input
+                    type="file"
+                    name="photo1"
+                    accept="image/*"
+                >
+
+            </div>
+
+
+            <!-- =================================================
+                 PHOTO 2
+            ================================================== -->
+
+            <div class="form-group">
+
+                <label>
+                    الصورة 2 (Сүрөт 2)
+                </label>
+
+                <input
+                    type="file"
+                    name="photo2"
+                    accept="image/*"
+                >
+
+            </div>
+
+
+            <!-- =================================================
+                 PHOTO 3
+            ================================================== -->
+
+            <div class="form-group">
+
+                <label>
+                    الصورة 3 (Сүрөт 3)
+                </label>
+
+                <input
+                    type="file"
+                    name="photo3"
+                    accept="image/*"
+                >
+
+            </div>
+
+        </div>
+
+
+        <!-- =====================================================
+             SUBMIT
+        ====================================================== -->
+
+        <button
+            type="submit"
+            class="btn"
+            id="submitBtn"
+        >
+            إنشاء ملف PDF (PDF даярдоо)
+        </button>
+
+
+        <div
+            id="status"
+            class="status"
+        ></div>
+
+    </form>
+
+
+    <!-- =====================================================
+         SEARCH BY FILE NUMBER
+    ====================================================== -->
+
+    <div class="search-box">
+
+        <h3>
+            البحث برقم الملف
+            (Файл № боюнча издөө)
+        </h3>
+
+
+        <div class="search-row">
+
+            <input
+                type="text"
+                id="searchFileNumber"
+                placeholder="Файл № жазыңыз"
+                autocomplete="off"
+            >
+
+
+            <button
+                type="button"
+                class="search-btn"
+                id="searchBtn"
+                onclick="searchBeneficiary()"
+            >
+                Издөө
+            </button>
+
+        </div>
+
+
+        <div
+            id="searchResult"
+            class="search-result"
+        ></div>
+
+    </div>
+
+
+    <!-- =====================================================
+         CREATED PDF FILES
+    ====================================================== -->
+
+    <div class="pdf-list">
+
+        <h3>
+            الملفات التي تم إنشاؤها
+            (Даяр болгон PDFтер):
+        </h3>
+
+
+        <div id="filesContainer">
+
+            {% for pdf in pdfs %}
+
+                <div class="pdf-item">
+
+                    <span>
+                        {{ pdf }}
+                    </span>
+
+
+                    <button
+                        type="button"
+                        class="local-file-btn"
+                        onclick="savePdf('{{ pdf }}')"
+                    >
+                        تحميل (Жүктөп алуу)
+                    </button>
+
+                </div>
+
+            {% else %}
+
+                <div style="
+                    color:#64748b;
+                    text-align:center;
+                    padding:15px;
+                ">
+                    Азырынча PDF түзүлө элек.
+                </div>
+
+            {% endfor %}
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     JAVASCRIPT
+========================================================== -->
+
+<script>
+
+
+    // ========================================================
+    // ELEMENTS
+    // ========================================================
+
+    const form =
+        document.getElementById(
+            'reportForm'
+        );
+
+    const statusDiv =
+        document.getElementById(
+            'status'
+        );
+
+    const btn =
+        document.getElementById(
+            'submitBtn'
+        );
+
+    const fileNumberInput =
+        document.getElementById(
+            'fileNumber'
+        );
+
+    const searchInput =
+        document.getElementById(
+            'searchFileNumber'
+        );
+
+    const searchBtn =
+        document.getElementById(
+            'searchBtn'
+        );
+
+    const searchResult =
+        document.getElementById(
+            'searchResult'
+        );
+
+
+    // ========================================================
+    // SUBMIT FORM
+    // ========================================================
+
+    form.onsubmit = async (e) => {
+
+        e.preventDefault();
+
+
+        // ----------------------------------------------------
+        // FILE NUMBER CHECK
+        // ----------------------------------------------------
+
+        const fileNumber =
+            fileNumberInput.value.trim();
+
+        if (!fileNumber) {
+
+            statusDiv.innerHTML = `
+                <div style="
+                    color:#dc2626;
+                    background:#fef2f2;
+                    border:1px solid #fecaca;
+                    padding:10px;
+                    border-radius:7px;
+                ">
+                    ⚠ Файл № киргизиңиз.
+                </div>
+            `;
+
+            fileNumberInput.focus();
+
+            return;
+        }
+
+
+        // ----------------------------------------------------
+        // BUTTON
+        // ----------------------------------------------------
+
+        btn.disabled = true;
+
+        btn.innerText =
+            'جاري المعالجة... (Даярдалууда...)';
+
+        statusDiv.innerHTML = '';
+
+
+        // ----------------------------------------------------
+        // FORM DATA
+        // ----------------------------------------------------
+
+        const formData =
+            new FormData(form);
+
+
+        try {
+
+
+            // ------------------------------------------------
+            // SEND TO SERVER
+            // ------------------------------------------------
+
+            const res =
+                await fetch(
+                    '/api/generate',
+                    {
+                        method: 'POST',
+                        body: formData
+                    }
+                );
+
+
+            // ------------------------------------------------
+            // JSON
+            // ------------------------------------------------
+
+            const data =
+                await res.json();
+
+
+            // ------------------------------------------------
+            // SUCCESS
+            // ------------------------------------------------
+
+            if (data.ok) {
+
+                statusDiv.innerHTML = `
+                    <div class="success-message">
+
+                        ✓ تم إنشاء الملف بنجاح!
+
+                        <br>
+
+                        <strong>
+                            Файл №:
+                            ${escapeHtml(data.file_number)}
+                        </strong>
+
+                        <br>
+
+                        <a
+                            href="${data.download}"
+                            target="_blank"
+                            style="
+                                color:#15803d;
+                                font-weight:700;
+                            "
+                        >
+                            اضغط هنا لتحميل الملف
+                        </a>
+
+                    </div>
+                `;
+
+
+                // --------------------------------------------
+                // Форманы тазалоо
+                // --------------------------------------------
+
+                form.reset();
+
+
+                // --------------------------------------------
+                // Баракчаны жаңыртуу
+                // --------------------------------------------
+
+                setTimeout(
+                    () => location.reload(),
+                    1800
+                );
+
+
+            } else {
+
+
+                // --------------------------------------------
+                // ERROR
+                // --------------------------------------------
+
+                statusDiv.innerHTML = `
+                    <div class="error-message">
+
+                        ✕ حدث خطأ:
+
+                        ${escapeHtml(
+                            data.error ||
+                            'Белгисиз ката'
+                        )}
+
+                    </div>
+                `;
+
+            }
+
+
+        } catch (err) {
+
+
+            // ------------------------------------------------
+            // CONNECTION ERROR
+            // ------------------------------------------------
+
+            statusDiv.innerHTML = `
+                <div class="error-message">
+
+                    ✕ Сервер менен байланышууда ката кетти.
+
+                    <br>
+
+                    Сервер иштеп жатканын текшериңиз.
+
+                </div>
+            `;
+
+        } finally {
+
+
+            // ------------------------------------------------
+            // ENABLE BUTTON
+            // ------------------------------------------------
+
+            btn.disabled = false;
+
+            btn.innerText =
+                'إنشاء ملف PDF (PDF даярдоо)';
+        }
+
+    };
+
+
+    // ========================================================
+    // SEARCH
+    // ========================================================
+
+    async function searchBeneficiary() {
+
+
+        const fileNumber =
+            searchInput.value.trim();
+
+
+        // ----------------------------------------------------
+        // EMPTY
+        // ----------------------------------------------------
+
+        if (!fileNumber) {
+
+            searchResult.innerHTML = `
+                <div class="error-message">
+                    ⚠ Файл № жазыңыз.
+                </div>
+            `;
+
+            searchInput.focus();
+
+            return;
+        }
+
+
+        // ----------------------------------------------------
+        // LOADING
+        // ----------------------------------------------------
+
+        searchBtn.disabled = true;
+
+        searchBtn.innerText =
+            'Изделүүдө...';
+
+
+        searchResult.innerHTML = `
+            <div class="loading-message">
+                Изделүүдө...
+            </div>
+        `;
+
+
+        try {
+
+
+            // ------------------------------------------------
+            // REQUEST
+            // ------------------------------------------------
+
+            const res =
+                await fetch(
+                    `/api/search?file_number=${encodeURIComponent(fileNumber)}`
+                );
+
+
+            const data =
+                await res.json();
+
+
+            // ------------------------------------------------
+            // NOT FOUND
+            // ------------------------------------------------
+
+            if (!data.ok) {
+
+                searchResult.innerHTML = `
+                    <div class="error-message">
+
+                        ✕
+                        ${escapeHtml(
+                            data.error ||
+                            'Катталган адам табылган жок.'
+                        )}
+
+                    </div>
+                `;
+
+                return;
+            }
+
+
+            // ------------------------------------------------
+            // DATA
+            // ------------------------------------------------
+
+            const b =
+                data.beneficiary;
+
+
+            // ------------------------------------------------
+            // RESULT
+            // ------------------------------------------------
+
+            searchResult.innerHTML = `
+
+                <div class="result-card">
+
+                    <div class="result-row">
+
+                        <span class="result-label">
+                            Файл №:
+                        </span>
+
+                        <span class="result-value">
+                            ${escapeHtml(
+                                b.file_number
+                            )}
+                        </span>
+
+                    </div>
+
+
+                    <div class="result-row">
+
+                        <span class="result-label">
+                            اسم اليتيم:
+                        </span>
+
+                        <span class="result-value">
+                            ${escapeHtml(
+                                b.beneficiary ||
+                                '-'
+                            )}
+                        </span>
+
+                    </div>
+
+
+                    <div class="result-row">
+
+                        <span class="result-label">
+                            اسم الكافل:
+                        </span>
+
+                        <span class="result-value">
+                            ${escapeHtml(
+                                b.sponsor ||
+                                '-'
+                            )}
+                        </span>
+
+                    </div>
+
+
+                    <div class="result-row">
+
+                        <span class="result-label">
+                            رقم اليتيم:
+                        </span>
+
+                        <span class="result-value">
+                            ${escapeHtml(
+                                b.beneficiary_number ||
+                                '-'
+                            )}
+                        </span>
+
+                    </div>
+
+
+                    <div class="result-row">
+
+                        <span class="result-label">
+                            الرقم الداخلي:
+                        </span>
+
+                        <span class="result-value">
+                            ${escapeHtml(
+                                b.internal_number ||
+                                '-'
+                            )}
+                        </span>
+
+                    </div>
+
+
+                    <div class="result-row">
+
+                        <span class="result-label">
+                            تاريخ الميلاد:
+                        </span>
+
+                        <span class="result-value">
+                            ${escapeHtml(
+                                b.birth_date ||
+                                '-'
+                            )}
+                        </span>
+
+                    </div>
+
+
+                    <div class="result-row">
+
+                        <span class="result-label">
+                            الجنس:
+                        </span>
+
+                        <span class="result-value">
+                            ${escapeHtml(
+                                b.gender ||
+                                '-'
+                            )}
+                        </span>
+
+                    </div>
+
+
+                    <div class="result-row">
+
+                        <span class="result-label">
+                            الحالة الصحية:
+                        </span>
+
+                        <span class="result-value">
+                            ${escapeHtml(
+                                b.health ||
+                                '-'
+                            )}
+                        </span>
+
+                    </div>
+
+
+                    <div class="result-row">
+
+                        <span class="result-label">
+                            الصف:
+                        </span>
+
+                        <span class="result-value">
+                            ${escapeHtml(
+                                b.class_name ||
+                                '-'
+                            )}
+                        </span>
+
+                    </div>
+
+
+                    <div class="result-row">
+
+                        <span class="result-label">
+                            أمنية المستقبل:
+                        </span>
+
+                        <span class="result-value">
+                            ${escapeHtml(
+                                b.future_wish ||
+                                '-'
+                            )}
+                        </span>
+
+                    </div>
+
+
+                    ${
+                        b.pdf_url
+                        ?
+                        `
+                        <div>
+
+                            <a
+                                href="${b.pdf_url}"
+                                target="_blank"
+                                class="pdf-open-btn"
+                            >
+                                📄 PDF ачуу
+                            </a>
+
+                        </div>
+                        `
+                        :
+                        ''
+                    }
+
+                </div>
+
+            `;
+
+
+        } catch (error) {
+
+
+            // ------------------------------------------------
+            // CONNECTION ERROR
+            // ------------------------------------------------
+
+            searchResult.innerHTML = `
+                <div class="error-message">
+
+                    ✕ Сервер менен байланышууда ката кетти.
+
+                </div>
+            `;
+
+
+        } finally {
+
+
+            // ------------------------------------------------
+            // ENABLE
+            // ------------------------------------------------
+
+            searchBtn.disabled = false;
+
+            searchBtn.innerText =
+                'Издөө';
+
+        }
+
+    }
+
+
+    // ========================================================
+    // ENTER = SEARCH
+    // ========================================================
+
+    searchInput.addEventListener(
+        'keydown',
+        function(event) {
+
+            if (
+                event.key === 'Enter'
+            ) {
+
+                event.preventDefault();
+
+                searchBeneficiary();
+
+            }
+
+        }
+    );
+
+
+    // ========================================================
+    // PDF ЖҮКТӨП АЛУУ — SAVE AS
+    // ========================================================
+
+    /*
+       Flask сервериндеги PDF download route.
+       Эгер app.py'де башка route болсо, УШУЛ БИР ЖЕРДЕ
+       гана өзгөртүңүз.
+
+       Мисалы:
+       /download/filename.pdf
+    */
+    const PDF_DOWNLOAD_BASE = '/download/';
+
+
+    async function savePdf(filename) {
+
+        if (!filename) {
+            alert('PDF файлдын аты табылган жок.');
+            return;
+        }
+
+        try {
+
+            // Файлдын сервердеги дареги
+            const pdfUrl =
+                PDF_DOWNLOAD_BASE +
+                encodeURIComponent(filename);
+
+
+            // =================================================
+            // 1. SERVERДЕН PDF ФАЙЛДЫ АЛУУ
+            // =================================================
+
+            const response = await fetch(pdfUrl);
+
+            if (!response.ok) {
+                throw new Error(
+                    'PDF файл серверден табылган жок. ' +
+                    'Download route текшериңиз.'
+                );
+            }
+
+
+            const blob = await response.blob();
+
+
+            // =================================================
+            // 2. CHROME / EDGE — SAVE AS
+            // =================================================
+
+            if ('showSaveFilePicker' in window) {
+
+                const handle =
+                    await window.showSaveFilePicker({
+
+                        suggestedName: filename,
+
+                        types: [
+                            {
+                                description: 'PDF файл',
+
+                                accept: {
+                                    'application/pdf': ['.pdf']
+                                }
+                            }
+                        ]
+
+                    });
+
+
+                // Тандалган файлга жазуу
+                const writable =
+                    await handle.createWritable();
+
+
+                await writable.write(blob);
+
+                await writable.close();
+
+
+                alert(
+                    '✓ PDF файл ийгиликтүү сакталды!\n\n' +
+                    filename
+                );
+
+                return;
+            }
+
+
+            // =================================================
+            // 3. БРАУЗЕР SAVE AS КОЛДОБОСО
+            // =================================================
+
+            const fileUrl =
+                URL.createObjectURL(blob);
+
+
+            const a =
+                document.createElement('a');
+
+
+            a.href = fileUrl;
+
+            a.download = filename;
+
+
+            document.body.appendChild(a);
+
+            a.click();
+
+            a.remove();
+
+
+            setTimeout(() => {
+
+                URL.revokeObjectURL(fileUrl);
+
+            }, 60000);
+
+
+        } catch (error) {
+
+
+            // Колдонуучу Cancel басса
+            if (error.name === 'AbortError') {
+                return;
+            }
+
+
+            console.error(
+                'PDF сактоодо ката:',
+                error
+            );
+
+
+            alert(
+                'PDF файлды сактоодо ката кетти.\n\n' +
+                error.message
+            );
+        }
+    }
+
+
+    // ========================================================
+    // ESCAPE HTML
+    // ========================================================
+
+    function escapeHtml(value) {
+
+        if (
+            value === null ||
+            value === undefined
+        ) {
+
+            return '';
+
+        }
+
+        return String(value)
+            .replace(
+                /&/g,
+                '&amp;'
+            )
+            .replace(
+                /</g,
+                '&lt;'
+            )
+            .replace(
+                />/g,
+                '&gt;'
+            )
+            .replace(
+                /"/g,
+                '&quot;'
+            )
+            .replace(
+                /'/g,
+                '&#039;'
+            );
+    }
+
+
+    // ========================================================
+    // PHOTO10 PREVIEW / CHECK
+    // ========================================================
+
+    const photo10 =
+        document.getElementById(
+            'photo10'
+        );
+
+
+    if (photo10) {
+
+        photo10.addEventListener(
+            'change',
+            function() {
+
+                if (
+                    this.files &&
+                    this.files.length > 0
+                ) {
+
+                    const file =
+                        this.files[0];
+
+                    if (
+                        !file.type.startsWith(
+                            'image/'
+                        )
+                    ) {
+
+                        alert(
+                            'Сүрөт файлын тандаңыз.'
+                        );
+
+                        this.value = '';
+
+                    }
+
+                }
+
+            }
+        );
+
+    }
+
+
+</script>
+
+</body>
+</html>
+```
