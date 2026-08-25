@@ -3,4 +3,4 @@ PyMuPDF==1.26.3
 Pillow==11.3.0
 qrcode==8.2
 gunicorn
-opencv-python-headless
+opencv-python-headless==4.8.1.78
