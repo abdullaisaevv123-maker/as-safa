@@ -116,7 +116,7 @@ IMAGES = {
 
 
 # ============================================================
-# АРИП ЖАНА TIMES NEW ROMAN
+# АРИП ЖАНА ТАБУУ (GITHUB ШРИФТИН ТЕКШЕРҮҮ)
 # ============================================================
 
 def _value_font(size_px):
@@ -124,20 +124,21 @@ def _value_font(size_px):
     fonts_dir = os.path.join(windir, "Fonts")
 
     candidates = [
+        BASE / "arabic.ttf",
+        "arabic.ttf",
+        BASE / "times.ttf",
+        "times.ttf",
         os.path.join(fonts_dir, "times.ttf"),
         os.path.join(fonts_dir, "timesbd.ttf"),
         os.path.join(fonts_dir, "Times New Roman.ttf"),
         os.path.join(fonts_dir, "timesnewroman.ttf"),
-        "times.ttf",
-        "Times New Roman.ttf",
-        "timesnewroman.ttf",
         os.path.join(fonts_dir, "arial.ttf"),
         "arial.ttf",
     ]
 
     for path in candidates:
         try:
-            return ImageFont.truetype(path, size_px)
+            return ImageFont.truetype(str(path), size_px)
         except Exception:
             continue
 
@@ -154,7 +155,7 @@ def _has_arabic(text):
 
 
 def _format_text(text):
-    text = str(text or "")
+    text = str(text or "").strip()
     if not text:
         return ""
 
@@ -162,7 +163,8 @@ def _format_text(text):
         try:
             import arabic_reshaper
             from bidi.algorithm import get_display
-            return get_display(arabic_reshaper.reshape(text))
+            reshaped_text = arabic_reshaper.reshape(text)
+            return get_display(reshaped_text)
         except Exception:
             return text
 
@@ -539,7 +541,7 @@ def put_qr_code(page, field, link_text):
 
 
 # ============================================================
-# ШИЛТЕМЕНИ PDF'ТЕГИ КҮРӨҢ АЯНТЧАГА ЖАЗУУ (КООРДИНАТ МЕНЕН КАМСЫЗДОО)
+# ШИЛТЕМЕНИ PDF'ТЕГИ КҮРӨҢ АЯНТЧАГА ЖАЗУУ
 # ============================================================
 
 def _split_link_into_two_lines(draw, text, font, max_width):
@@ -593,7 +595,6 @@ def _split_link_into_two_lines(draw, text, font, max_width):
 def put_link_text(page, field, link_text):
     rect = None
 
-    # 1. Форма талаасы (widget) аркылуу табууга аракет кылуу
     for w in list(page.widgets() or []):
         if w.field_name == field or "Text16" in w.field_name:
             rect = fitz.Rect(w.rect)
@@ -604,16 +605,12 @@ def put_link_text(page, field, link_text):
                 pass
             break
 
-    # 2. Эгер талаа табылмаса, беттеги текстти ("رابط الفيديو") же координатты колдонобуз
     if rect is None:
-        # 3-беттеги "رابط الفيديو" сөзүн издеп таап, анын төмөн жагындагы аянтты алабыз
         rects = page.search_for("رابط الفيديو")
         if rects:
             r = rects[0]
-            # Сөздүн астындагы күрөң аянтчанын координаттарын түз түзөбүз (тууралоо)
             rect = fitz.Rect(r.x0 - 50, r.y1 + 5, r.x1 + 150, r.y1 + 35)
         else:
-            # Эгер таппаса стандарттуу орточо координатты коёбуз (3-бет үчүн)
             rect = fitz.Rect(150, 700, 450, 735)
 
     if not link_text:
