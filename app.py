@@ -65,7 +65,30 @@ def init_db():
         )
     """)
     conn.commit()
-    conn.close()
+  def _value_font(size_px):
+    # Сервердеги NotoNaskhArabic-Regular.ttf шрифтин биринчи текшерип колдонобуз
+    font_path = BASE / "NotoNaskhArabic-Regular.ttf"
+    if font_path.exists():
+        try:
+            return ImageFont.truetype(str(font_path), size_px)
+        except Exception:
+            pass
+            
+    # Калган стандарттуу шрифттер
+    windir = os.environ.get("WINDIR", r"C:\Windows")
+    fonts_dir = os.path.join(windir, "Fonts")
+    candidates = [
+        os.path.join(fonts_dir, "times.ttf"),
+        os.path.join(fonts_dir, "timesbd.ttf"),
+        os.path.join(fonts_dir, "Times New Roman.ttf"),
+        "times.ttf",
+    ]
+    for path in candidates:
+        try:
+            return ImageFont.truetype(path, size_px)
+        except Exception:
+            continue
+    return ImageFont.load_default()  conn.close()
 
 
 init_db()
