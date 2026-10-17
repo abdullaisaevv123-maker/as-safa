@@ -114,7 +114,7 @@ def _format_text(text):
     return text
 
 # ============================================================
-# PDF FIELD NAMES (Бардык тексттик талаалар)
+# PDF FIELD NAMES
 # ============================================================
 TEXT = {
     "sponsor": (0, "Text1"),
@@ -130,16 +130,10 @@ TEXT = {
     "notes": (1, "Text7"),
 }
 
-# ============================================================
-# АВТОМАТТЫК МААЛЫМАТТАР
-# ============================================================
 COUNTRY_VALUE = "قيرغيزستان"
 YEAR_VALUE = "2027"
 YEAR_FIELD = "Dropdown6_year"
 
-# ============================================================
-# СҮРӨТ ЖАНА ШИЛТЕМЕ FIELD'ТЕРИ
-# ============================================================
 IMAGES = {
     "photo10": (0, "Image1"),
     "photo1": (2, "Image3"),
@@ -356,7 +350,7 @@ def put_image(page, field, data, photo10=False):
         return False
 
 # ============================================================
-# ГЕНЕРАЦИЯ QR КОДА
+# QR КОД ЖАНА ШИЛТЕМЕ
 # ============================================================
 def generate_qr_bytes(text):
     qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=2)
@@ -393,57 +387,6 @@ def put_qr_code(page, field, link_text):
         im.save(b, "JPEG", quality=95)
         page.draw_rect(rect, color=(1, 1, 1), fill=(1, 1, 1), width=0, overlay=True)
         page.insert_image(rect, stream=b.getvalue(), keep_proportion=False, overlay=True)
-        return True
-    except Exception:
-        return False
-
-# ============================================================
-# ШИЛТЕМЕ
-# ============================================================
-def put_link_text(page, field, link_text):
-    try:
-        rect = None
-        for w in list(page.widgets() or []):
-            if w.field_name == field:
-                rect = fitz.Rect(w.rect)
-                try:
-                    page.delete_widget(w)
-                except Exception:
-                    pass
-                break
-        if rect is None or not link_text:
-            return False
-
-        scale = 5
-        W = max(300, int(rect.width * scale))
-        H = max(60, int(rect.height * scale))
-        canvas = Image.new("RGBA", (W, H), (255, 255, 255, 0))
-        draw = ImageDraw.Draw(canvas)
-        padding_x = 8 * scale
-        max_width = W - padding_x * 2
-
-        selected_font = _value_font(8 * scale)
-        for size_pt in range(13, 5, -1):
-            font = _value_font(size_pt * scale)
-            bbox = draw.textbbox((0, 0), link_text, font=font)
-            if bbox[2] - bbox[0] <= max_width:
-                selected_font = font
-                break
-
-        bbox = draw.textbbox((0, 0), link_text, font=selected_font)
-        text_w = bbox[2] - bbox[0]
-        x = max(padding_x, min((W - text_w) // 2, W - text_w - padding_x))
-        y = max(0, int((H - (bbox[3] - bbox[1])) / 2 - bbox[1]))
-
-        draw.text((x, y), link_text, font=selected_font, fill=(20, 20, 20, 255))
-        b = io.BytesIO()
-        canvas.save(b, "PNG")
-        page.insert_image(rect, stream=b.getvalue(), keep_proportion=False, overlay=True)
-
-        link_uri = link_text.strip()
-        if not link_uri.startswith(("http://", "https://")):
-            link_uri = "https://" + link_uri
-        page.insert_link({"kind": fitz.LINK_URI, "from": rect, "uri": link_uri})
         return True
     except Exception:
         return False
