@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 
@@ -7,6 +6,9 @@
 
     <meta name="viewport"
           content="width=device-width, initial-scale=1.0">
+
+    <!-- Excel support -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <title>توليد استمارة التقرير</title>
 
@@ -360,6 +362,95 @@
             }
         }
 
+
+        /* =====================================================
+           EXCEL DATABASE TOOLBAR
+        ====================================================== */
+        .title-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .title-row h1 {
+            flex: 1;
+            margin: 0;
+        }
+
+        .excel-tools {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            direction: ltr;
+        }
+
+        .excel-btn {
+            border: 1px solid #cbd5e1;
+            background: #fff;
+            color: #1e293b;
+            padding: 8px 12px;
+            border-radius: 7px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .excel-btn:hover {
+            background: #f1f5f9;
+        }
+
+        .excel-btn.import {
+            background: #2563eb;
+            color: #fff;
+            border-color: #2563eb;
+        }
+
+        .excel-btn.export {
+            background: #16a34a;
+            color: #fff;
+            border-color: #16a34a;
+        }
+
+        .excel-btn.delete {
+            background: #dc2626;
+            color: #fff;
+            border-color: #dc2626;
+        }
+
+        .excel-status {
+            margin-top: -15px;
+            margin-bottom: 18px;
+            font-size: 12px;
+            color: #64748b;
+            text-align: right;
+        }
+
+        .file-found {
+            border-color: #16a34a !important;
+            background: #f0fdf4 !important;
+        }
+
+        .file-not-found {
+            border-color: #f59e0b !important;
+            background: #fffbeb !important;
+        }
+
+        @media (max-width: 700px) {
+            .title-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .excel-tools {
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+        }
+
     </style>
 </head>
 
@@ -372,9 +463,34 @@
          TITLE
     ====================================================== -->
 
-    <h1>
-        استمارة تقرير اليتيم
-    </h1>
+    <div class="title-row">
+        <h1>استمارة تقرير اليتيم</h1>
+
+        <div class="excel-tools" title="Excel маалымат базасы">
+            <input
+                type="file"
+                id="excelFileInput"
+                accept=".xlsx,.xls,.csv"
+                style="display:none"
+            >
+
+            <button type="button" class="excel-btn import" id="excelImportBtn">
+                📥 Excel импорт
+            </button>
+
+            <button type="button" class="excel-btn export" id="excelExportBtn">
+                📤 Excel экспорт
+            </button>
+
+            <button type="button" class="excel-btn delete" id="excelDeleteBtn">
+                🗑 Excel өчүрүү
+            </button>
+        </div>
+    </div>
+
+    <div id="excelStatus" class="excel-status">
+        Excel базасы жүктөлгөн эмес.
+    </div>
 
 
     <!-- =====================================================
@@ -529,7 +645,7 @@
                 <input
                     type="text"
                     name="birth_date"
-                    placeholder="DD/MM/YYYY"
+                    placeholder="дд.мм.гггг"
                 >
 
             </div>
@@ -545,17 +661,11 @@
                     الجنس (Жынысы)
                 </label>
 
-                <select name="gender">
-
-                    <option value="ذكر">
-                        ذكر (Эркек)
-                    </option>
-
-                    <option value="أنثى">
-                        أنثى (Кыз)
-                    </option>
-
-                </select>
+                <input
+                    type="text"
+                    name="gender"
+                    placeholder=" эркек кыз"
+                >
 
             </div>
 
@@ -570,41 +680,11 @@
                     الحالة الصحية (Ден соолугу)
                 </label>
 
-                <select name="health">
-
-                    <option value="جيد">
-                        جيد (Жакшы)
-                    </option>
-
-                    <option value="ضعف البصر">
-                        ضعف البصر (Көзү начар көрөт)
-                    </option>
-
-                    <option value="أمراض القلب">
-                        أمراض القلب (Жүрөк оорусу)
-                    </option>
-
-                    <option value="حساسية">
-                        حساسية (Аллергия)
-                    </option>
-
-                    <option value="مرض السكري">
-                        مرض السكري (Кант диабети)
-                    </option>
-
-                    <option value="الربو">
-                        الربو (Астма)
-                    </option>
-
-                    <option value="إعاقة حركية">
-                        إعاقة حركية (Кыймылдоо мүмкүнчүлүгү чектелген)
-                    </option>
-
-                    <option value="مريض">
-                        مريض (Оорулуу)
-                    </option>
-
-                </select>
+                <input
+                    type="text"
+                    name="health"
+                    placeholder=" ден соолугу"
+                >
 
             </div>
 
@@ -614,69 +694,16 @@
             ================================================== -->
 
             <div class="form-group">
-
                 <label>
-                    أدرس في الصف (Классты тандоо)
+                    أدرس في الصف (Класс)
                 </label>
-
-                <select name="class_name">
-
-                    <option value="لايدرس">
-                        لا يدرس (окубайт)
-                    </option>
-
-                    <option value="الأول">
-                        الأول (1-класс)
-                    </option>
-
-                    <option value="الثاني">
-                        الثاني (2-класс)
-                    </option>
-
-                    <option value="الثالث">
-                        الثالث (3-класс)
-                    </option>
-
-                    <option value="الرابع">
-                        الرابع (4-класс)
-                    </option>
-
-                    <option value="الخامس">
-                        الخامس (5-класс)
-                    </option>
-
-                    <option value="السادس">
-                        السادس (6-класс)
-                    </option>
-
-                    <option value="السابع">
-                        السابع (7-класс)
-                    </option>
-
-                    <option value="الثامن">
-                        الثامن (8-класс)
-                    </option>
-
-                    <option value="التاسع">
-                        التاسع (9-класс)
-                    </option>
-
-                    <option value="العاشر">
-                        العاشر (10-класс)
-                    </option>
-
-                    <option value="الحادي عشر">
-                        الحادي عشر (11-класс)
-                    </option>
-
-                    <option value="طالب جامعي">
-                        طالب جامعي (Студент)
-                    </option>
-
-                </select>
-
+                <input
+                    type="text"
+                    name="class"
+                    id="class"
+                    placeholder="Мисалы: 5-класс"
+                >
             </div>
-
 
             <!-- =================================================
                  FUTURE WISH
@@ -1539,14 +1566,6 @@
     // PDF ЖҮКТӨП АЛУУ — SAVE AS
     // ========================================================
 
-    /*
-       Flask сервериндеги PDF download route.
-       Эгер app.py'де башка route болсо, УШУЛ БИР ЖЕРДЕ
-       гана өзгөртүңүз.
-
-       Мисалы:
-       /download/filename.pdf
-    */
     const PDF_DOWNLOAD_BASE = '/download/';
 
 
@@ -1559,32 +1578,19 @@
 
         try {
 
-            // Файлдын сервердеги дареги
             const pdfUrl =
                 PDF_DOWNLOAD_BASE +
                 encodeURIComponent(filename);
-
-
-            // =================================================
-            // 1. SERVERДЕН PDF ФАЙЛДЫ АЛУУ
-            // =================================================
 
             const response = await fetch(pdfUrl);
 
             if (!response.ok) {
                 throw new Error(
-                    'PDF файл серверден табылган жок. ' +
-                    'Download route текшериңиз.'
+                    'PDF файл серверден табылган жок. '
                 );
             }
 
-
             const blob = await response.blob();
-
-
-            // =================================================
-            // 2. CHROME / EDGE — SAVE AS
-            // =================================================
 
             if ('showSaveFilePicker' in window) {
 
@@ -1605,16 +1611,12 @@
 
                     });
 
-
-                // Тандалган файлга жазуу
                 const writable =
                     await handle.createWritable();
-
 
                 await writable.write(blob);
 
                 await writable.close();
-
 
                 alert(
                     '✓ PDF файл ийгиликтүү сакталды!\n\n' +
@@ -1624,30 +1626,21 @@
                 return;
             }
 
-
-            // =================================================
-            // 3. БРАУЗЕР SAVE AS КОЛДОБОСО
-            // =================================================
-
             const fileUrl =
                 URL.createObjectURL(blob);
-
 
             const a =
                 document.createElement('a');
 
-
             a.href = fileUrl;
 
             a.download = filename;
-
 
             document.body.appendChild(a);
 
             a.click();
 
             a.remove();
-
 
             setTimeout(() => {
 
@@ -1658,18 +1651,14 @@
 
         } catch (error) {
 
-
-            // Колдонуучу Cancel басса
             if (error.name === 'AbortError') {
                 return;
             }
-
 
             console.error(
                 'PDF сактоодо ката:',
                 error
             );
-
 
             alert(
                 'PDF файлды сактоодо ката кетти.\n\n' +
@@ -1679,42 +1668,479 @@
     }
 
 
+
+    // ========================================================
+    // EXCEL DATABASE — IMPORT / EXPORT / DELETE / AUTO-FILL
+    // ========================================================
+
+    const EXCEL_STORAGE_KEY = 'orphan_report_excel_database_v1';
+
+    const excelFileInput = document.getElementById('excelFileInput');
+    const excelImportBtn = document.getElementById('excelImportBtn');
+    const excelExportBtn = document.getElementById('excelExportBtn');
+    const excelDeleteBtn = document.getElementById('excelDeleteBtn');
+    const excelStatus = document.getElementById('excelStatus');
+
+    const EXCEL_FIELD_ALIASES = {
+        file_number: ['file_number', 'file number', 'файл №', 'файл№', 'файл номер', 'رقم الملف', 'رقم الملف (Файл №)'],
+        sponsor: ['sponsor', 'кафилдин аты', 'кафил', 'اسم الكافل'],
+        beneficiary: ['beneficiary', 'жетимдин аты', 'жетим', 'اسم اليتيم'],
+        beneficiary_number: ['beneficiary_number', 'beneficiary number', 'кафилдин номери', 'номер кафила', 'رقم الكافل'],
+        internal_number: ['internal_number', 'internal number', 'жетимдин номери', 'ички номери', 'ичкі номер', 'رقم اليتيم', 'الرقم الداخلي'],
+        birth_date: ['birth_date', 'birth date', 'туулган күнү', 'туулган жылы', 'туулган жылы/күнү', 'تاريخ الميلاد'],
+        gender: ['gender', 'жынысы', 'الجنس'],
+        health: ['health', 'ден соолугу', 'الحالة الصحية'],
+        class_name: ['class_name', 'class', 'класс', 'классы', 'الصف'],
+        future_wish: ['future_wish', 'future wish', 'келечектеги кыялы', 'أمنية المستقبل'],
+        impact: ['impact', 'кафалаттын жетимдин жашоосуна таасири', 'أثر الكفالة على حياة اليتيم'],
+        notes: ['notes', 'эскертүү', 'мушрифтин эскертүүсү', 'ملاحظات المشرف'],
+        link: ['link', 'ссылка', 'шилтеме', 'رابط الفيديو / الملف']
+    };
+
+    function normalizeExcelKey(value) {
+        return String(value ?? '')
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, ' ');
+    }
+
+    function getStoredExcelRows() {
+        try {
+            const raw = localStorage.getItem(EXCEL_STORAGE_KEY);
+            const rows = raw ? JSON.parse(raw) : [];
+            return Array.isArray(rows) ? rows : [];
+        } catch (e) {
+            console.error('Excel storage read error:', e);
+            return [];
+        }
+    }
+
+    function setStoredExcelRows(rows) {
+        localStorage.setItem(EXCEL_STORAGE_KEY, JSON.stringify(rows));
+        updateExcelStatus();
+    }
+
+    function findColumn(row, field) {
+        const aliases = EXCEL_FIELD_ALIASES[field] || [];
+        const normalizedAliases = aliases.map(normalizeExcelKey);
+
+        for (const key of Object.keys(row || {})) {
+            if (normalizedAliases.includes(normalizeExcelKey(key))) {
+                return key;
+            }
+        }
+
+        return null;
+    }
+
+    // ========================================================
+    // EXCEL VALUE NORMALIZATION (ДАТА АРТКА КЕТПЕЙ ТУРГАН КЫЛЫП ТҮЗДӨЛдү)
+    // ========================================================
+
+    function pad2(value) {
+        return String(value).padStart(2, '0');
+    }
+
+    function formatDateParts(day, month, year) {
+        let y = Number(year);
+        let m = Number(month);
+        let d = Number(day);
+
+        if (y < 100) y += (y >= 50 ? 1900 : 2000);
+
+        return `${pad2(d)}.${pad2(m)}.${y}`;
+    }
+
+    function normalizeExcelDate(value) {
+        if (value === null || value === undefined || value === '') return '';
+
+        // 1. Эгер Excel датасы Date объекти катары келсе, +12 саат буфер кошуп оңдойбуз
+        if (value instanceof Date && !isNaN(value.getTime())) {
+            const correctedDate = new Date(value.getTime() + (12 * 60 * 60 * 1000));
+            return formatDateParts(
+                correctedDate.getUTCDate(),
+                correctedDate.getUTCMonth() + 1,
+                correctedDate.getUTCFullYear()
+            );
+        }
+
+        // 2. Excel serial number (мисалы 40543)
+        if (typeof value === 'number' && isFinite(value)) {
+            const utc_days = Math.floor(value - 25569);
+            const utc_value = utc_days * 86400;
+            const date = new Date((utc_value + 43200) * 1000); // +12 саат кошуу
+            if (!isNaN(date.getTime())) {
+                return formatDateParts(
+                    date.getUTCDate(),
+                    date.getUTCMonth() + 1,
+                    date.getUTCFullYear()
+                );
+            }
+        }
+
+        let s = String(value).trim();
+        if (!s) return '';
+
+        // YYYY-MM-DD / YYYY/MM/DD
+        let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+        if (m) {
+            return formatDateParts(m[3], m[2], m[1]);
+        }
+
+        // DD.MM.YYYY / DD-MM-YYYY / DD.MM.YY
+        m = s.match(/^(\d{1,2})[.\-](\d{1,2})[.\-](\d{2}|\d{4})$/);
+        if (m) {
+            return formatDateParts(m[1], m[2], m[3]);
+        }
+
+        m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+        if (m) {
+            const a = Number(m[1]);
+            const b = Number(m[2]);
+
+            if (a > 12 && b <= 12) {
+                return formatDateParts(b, a, m[3]);
+            }
+
+            return formatDateParts(a, b, m[3]);
+        }
+
+        return s;
+    }
+
+    function normalizeGenderText(value) {
+        return String(value ?? '').trim().toLowerCase();
+    }
+
+    function isFemaleGender(value) {
+        const g = normalizeGenderText(value);
+        return [
+            'кыз',
+            'кыз бала',
+            'аял',
+            'аял киши',
+            'женский',
+            'female',
+            'f',
+            'أنثى',
+            'انثى',
+            'أنثي',
+            'بنت'
+        ].includes(g);
+    }
+
+    function makeFemaleFutureWish(value, female) {
+        const s = String(value ?? '').trim();
+        if (!s || !female) return s;
+
+        const map = {
+            'طبيب': 'طبيبة',
+            'طبيبة': 'طبيبة',
+            'تببيب': 'طبيبة',
+            'табиб': 'طبيبة',
+            'طبيباً': 'طبيبة',
+            'مهندس': 'مهندسة',
+            'مهندسة': 'مهندسة',
+            'معلم': 'معلمة',
+            'معلمة': 'معلمة',
+            'مدرس': 'مدرسة',
+            'مدرسة': 'مدرسة',
+            'ممرض': 'ممرضة',
+            'ممرضة': 'ممرضة',
+            'محامي': 'محامية',
+            'محامية': 'محامية',
+            'طيار': 'طيارة',
+            'طيارة': 'طيارة',
+            'شرطي': 'شرطية',
+            'شرطية': 'شرطية',
+            'صحفي': 'صحفية',
+            'صحفية': 'صحفية',
+            'مترجم': 'مترجمة',
+            'مترجمة': 'مترجمة',
+            'طباخ': 'طباخة',
+            'طباخة': 'طباخة'
+        };
+
+        return map[s] || s;
+    }
+
+    function getExcelField(row, field) {
+        const key = findColumn(row, field);
+        if (!key) return '';
+
+        const value = row[key];
+
+        if (field === 'birth_date') {
+            return normalizeExcelDate(value);
+        }
+
+        return String(value ?? '').trim();
+    }
+
+    function findExcelPerson(fileNumber) {
+        const wanted = String(fileNumber ?? '').trim();
+        if (!wanted) return null;
+
+        const rows = getStoredExcelRows();
+
+        return rows.find(row => {
+            const value = getExcelField(row, 'file_number');
+            return String(value).trim() === wanted;
+        }) || null;
+    }
+
+    function setFormValue(name, value) {
+        const el = form.querySelector(`[name="${name}"]`);
+        if (!el || value === '') return;
+
+        el.value = value;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function fillFormFromExcel(row) {
+        const fields = [
+            'sponsor',
+            'beneficiary',
+            'beneficiary_number',
+            'internal_number',
+            'birth_date',
+            'gender',
+            'health',
+            'class_name',
+            'future_wish',
+            'impact',
+            'notes',
+            'link'
+        ];
+
+        fields.forEach(field => {
+            const formField = field === 'class_name' ? 'class' : field;
+            let value = getExcelField(row, field);
+
+            if (field === 'future_wish') {
+                const gender = getExcelField(row, 'gender');
+                value = makeFemaleFutureWish(value, isFemaleGender(gender));
+            }
+
+            setFormValue(formField, value);
+        });
+    }
+
+    function searchExcelByFileNumber(showMessage = true) {
+        const number = fileNumberInput.value.trim();
+
+        fileNumberInput.classList.remove('file-found', 'file-not-found');
+
+        if (!number) {
+            if (showMessage) statusDiv.innerHTML = '';
+            return;
+        }
+
+        const row = findExcelPerson(number);
+
+        if (row) {
+            fillFormFromExcel(row);
+            fileNumberInput.classList.add('file-found');
+
+            if (showMessage) {
+                statusDiv.innerHTML = `
+                    <div class="success-message">
+                        ✓ Excel базасынан Файл № <strong>${escapeHtml(number)}</strong> табылды.
+                        Маалыматтар автоматтык түрдө толтурулду.
+                    </div>
+                `;
+            }
+        } else {
+            fileNumberInput.classList.add('file-not-found');
+
+            if (showMessage) {
+                statusDiv.innerHTML = `
+                    <div style="
+                        color:#92400e;
+                        background:#fffbeb;
+                        border:1px solid #fde68a;
+                        padding:10px;
+                        border-radius:7px;
+                        font-weight:600;
+                    ">
+                        Файл № <strong>${escapeHtml(number)}</strong> Excel базасында жок.
+                        Маалыматты өзүңүз толтурсаңыз болот.
+                    </div>
+                `;
+            }
+        }
+    }
+
+    fileNumberInput.addEventListener('input', () => {
+        clearTimeout(window.__excelLookupTimer);
+        window.__excelLookupTimer = setTimeout(() => {
+            searchExcelByFileNumber(true);
+        }, 250);
+    });
+
+    fileNumberInput.addEventListener('blur', () => {
+        searchExcelByFileNumber(true);
+    });
+
+    function updateExcelStatus() {
+        const rows = getStoredExcelRows();
+
+        if (!rows.length) {
+            excelStatus.textContent = 'Excel базасы жүктөлгөн эмес.';
+            return;
+        }
+
+        excelStatus.textContent =
+            `Excel базасында ${rows.length} жазуу бар. Файл № киргизсеңиз, маалымат автоматтык толтурулат.`;
+    }
+
+    excelImportBtn.addEventListener('click', () => {
+        excelFileInput.click();
+    });
+
+    excelFileInput.addEventListener('change', async (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        try {
+            if (typeof XLSX === 'undefined') {
+                throw new Error('Excel модулу жүктөлгөн жок.');
+            }
+
+            const buffer = await file.arrayBuffer();
+            const workbook = XLSX.read(buffer, {
+                type: 'array',
+                cellDates: false,
+                raw: false
+            });
+
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(firstSheet, {
+                defval: '',
+                raw: false,
+                cellDates: false
+            });
+
+            if (!rows.length) {
+                throw new Error('Excel файлында маалымат жок.');
+            }
+
+            const fileColumnExists = rows.some(row => !!findColumn(row, 'file_number'));
+
+            if (!fileColumnExists) {
+                throw new Error(
+                    'Excel файлында Файл № колонкасы табылган жок.'
+                );
+            }
+
+            const unique = new Map();
+
+            rows.forEach(row => {
+                const number = getExcelField(row, 'file_number');
+                if (number) unique.set(String(number).trim(), row);
+            });
+
+            const cleanRows = Array.from(unique.values());
+
+            setStoredExcelRows(cleanRows);
+
+            statusDiv.innerHTML = `
+                <div class="success-message">
+                    ✓ Excel ийгиликтүү импорттолду: <strong>${cleanRows.length}</strong> жазуу.
+                </div>
+            `;
+
+            excelFileInput.value = '';
+
+            searchExcelByFileNumber(false);
+
+        } catch (error) {
+            console.error('Excel import error:', error);
+
+            statusDiv.innerHTML = `
+                <div class="error-message">
+                    ✕ Excel импорттоодо ката: ${escapeHtml(error.message)}
+                </div>
+            `;
+
+            excelFileInput.value = '';
+        }
+    });
+
+    excelExportBtn.addEventListener('click', () => {
+        try {
+            if (typeof XLSX === 'undefined') {
+                throw new Error('Excel модулу жүктөлгөн жок.');
+            }
+
+            const rows = getStoredExcelRows();
+
+            if (!rows.length) {
+                alert('Экспорт кыла турган Excel маалымат базасы жок.');
+                return;
+            }
+
+            const worksheet = XLSX.utils.json_to_sheet(rows);
+            const workbook = XLSX.utils.book_new();
+
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Orphans');
+
+            XLSX.writeFile(
+                workbook,
+                'orphan_report_database.xlsx'
+            );
+
+        } catch (error) {
+            console.error('Excel export error:', error);
+            alert('Excel экспорттоодо ката кетти: ' + error.message);
+        }
+    });
+
+    excelDeleteBtn.addEventListener('click', () => {
+        const rows = getStoredExcelRows();
+
+        if (!rows.length) {
+            alert('Өчүрө турган Excel базасы жок.');
+            return;
+        }
+
+        const ok = confirm(
+            `Excel базасында ${rows.length} жазуу бар.\n\n` +
+            'Бул браузерде сакталган Excel маалыматтарын толугу менен өчүрөсүзбү?'
+        );
+
+        if (!ok) return;
+
+        localStorage.removeItem(EXCEL_STORAGE_KEY);
+        updateExcelStatus();
+
+        fileNumberInput.classList.remove('file-found', 'file-not-found');
+
+        statusDiv.innerHTML = `
+            <div class="success-message">
+                ✓ Excel базасы өчүрүлдү.
+            </div>
+        `;
+    });
+
+    updateExcelStatus();
+
     // ========================================================
     // ESCAPE HTML
     // ========================================================
 
     function escapeHtml(value) {
-
-        if (
-            value === null ||
-            value === undefined
-        ) {
-
+        if (value === null || value === undefined) {
             return '';
-
         }
 
         return String(value)
-            .replace(
-                /&/g,
-                '&amp;'
-            )
-            .replace(
-                /</g,
-                '&lt;'
-            )
-            .replace(
-                />/g,
-                '&gt;'
-            )
-            .replace(
-                /"/g,
-                '&quot;'
-            )
-            .replace(
-                /'/g,
-                '&#039;'
-            );
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 
 
@@ -1727,18 +2153,14 @@
             'photo10'
         );
 
-
     if (photo10) {
-
         photo10.addEventListener(
             'change',
             function() {
-
                 if (
                     this.files &&
                     this.files.length > 0
                 ) {
-
                     const file =
                         this.files[0];
 
@@ -1747,25 +2169,17 @@
                             'image/'
                         )
                     ) {
-
                         alert(
                             'Сүрөт файлын тандаңыз.'
                         );
-
                         this.value = '';
-
                     }
-
                 }
-
             }
         );
-
     }
-
 
 </script>
 
 </body>
 </html>
-```
