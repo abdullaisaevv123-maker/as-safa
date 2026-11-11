@@ -8,7 +8,7 @@ import cv2
 import fitz
 import numpy as np
 import qrcode
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageOps
 from flask import Flask, jsonify, render_template, request, send_from_directory, url_for
 
 # ============================================================
@@ -64,191 +64,16 @@ def init_db():
 init_db()
 
 # ============================================================
-# АРИП ЖАНА TIMES NEW ROMAN
-# ============================================================
-def _value_font(size_px):
-    font_path = BASE / "NotoNaskhArabic-Regular.ttf"
-    if font_path.exists():
-        try:
-            return ImageFont.truetype(str(font_path), size_px)
-        except Exception:
-            pass
-
-    windir = os.environ.get("WINDIR", r"C:\Windows")
-    fonts_dir = os.path.join(windir, "Fonts")
-    candidates = [
-        os.path.join(fonts_dir, "times.ttf"),
-        os.path.join(fonts_dir, "timesbd.ttf"),
-        os.path.join(fonts_dir, "Times New Roman.ttf"),
-        os.path.join(fonts_dir, "timesnewroman.ttf"),
-        "times.ttf",
-        "Times New Roman.ttf",
-        "timesnewroman.ttf",
-        os.path.join(fonts_dir, "arial.ttf"),
-        "arial.ttf",
-    ]
-    for path in candidates:
-        try:
-            return ImageFont.truetype(path, size_px)
-        except Exception:
-            continue
-    return ImageFont.load_default()
-
-def _has_arabic(text):
-    return any(
-        "\u0600" <= ch <= "\u06ff" or "\u0750" <= ch <= "\u077f" or "\u08a0" <= ch <= "\u08ff"
-        for ch in str(text)
-    )
-
-def _format_text(text):
-    text = str(text or "")
-    if not text:
-        return ""
-    if _has_arabic(text):
-        try:
-            import arabic_reshaper
-            from bidi.algorithm import get_display
-            return get_display(arabic_reshaper.reshape(text))
-        except Exception:
-            return text
-    return text
-
-# ============================================================
 # PDF FIELD NAMES
 # ============================================================
-TEXT = {
-    "sponsor": (0, "Text1"),
-    "beneficiary": (0, "Text2"),
-    "beneficiary_number": (0, "Text3"),
-    "internal_number": (1, "Text4"),
-    "birth_date": (1, "Date2"),
-    "gender": (1, "Dropdown3"),
-    "health": (1, "Dropdown4"),
-    "class_name": (1, "Text9"),
-    "future_wish": (1, "Text5"),
-    "impact": (1, "Text6"),
-    "notes": (1, "Text7"),
-}
-
-COUNTRY_VALUE = "قيرغيزستان"
-YEAR_VALUE = "2027"
-YEAR_FIELD = "Dropdown6_year"
-
+# Тексттер PDFтин ичине басылып жазылбашы үчүн ТЕКСТтик талаалар өчүрүлдү.
 IMAGES = {
     "photo10": (0, "Image1"),
     "photo1": (2, "Image3"),
     "photo2": (2, "Image2"),
     "photo3": (2, "Image4"),
     "qr_code": (2, "Image5"),
-    "link_area": (2, "Text8"),
 }
-
-# ============================================================
-# ТЕКСТТИ PDF ТАЛААСЫНА СҮРӨТ КАТАРЫ КОЮУ
-# ============================================================
-def _render_value(text, width_pt, height_pt, size_pt=18, align="right", top_align=False):
-    if text is None:
-        return None
-    text = str(text).strip()
-    if not text:
-        return None
-
-    scale = 4
-    W = max(40, int(width_pt * scale))
-    H = max(30, int(height_pt * scale))
-    canvas = Image.new("RGBA", (W, H), (255, 255, 255, 0))
-    draw = ImageDraw.Draw(canvas)
-    
-    font = _value_font(max(10, int(size_pt * scale)))
-    padding_x = 12 * scale
-    max_width = W - (padding_x * 2)
-
-    words = text.split()
-    lines = []
-    if len(words) <= 1:
-        lines = [text]
-    else:
-        current = ""
-        for word in words:
-            candidate = word if not current else current + " " + word
-            try:
-                box = draw.textbbox((0, 0), _format_text(candidate), font=font)
-                line_width = box[2] - box[0]
-            except Exception:
-                line_width = len(candidate) * size_pt
-            if line_width <= max_width or not current:
-                current = candidate
-            else:
-                lines.append(current)
-                current = word
-        if current:
-            lines.append(current)
-
-    sample = _format_text("ابتAg0123456789")
-    try:
-        bbox = draw.textbbox((0, 0), sample, font=font)
-        line_h = max(1, bbox[3] - bbox[1])
-    except Exception:
-        line_h = int(size_pt * scale)
-    bbox = (0, 0, 0, line_h)
-
-    spacing = max(2, int(size_pt * 0.20 * scale))
-    total_h = len(lines) * line_h + max(0, len(lines) - 1) * spacing
-
-    if top_align:
-        y = 5 * scale
-    else:
-        y = max(0, int((H - total_h) / 2 - bbox[1]))
-
-    for line in lines:
-        processed_line = _format_text(line)
-        try:
-            line_box = draw.textbbox((0, 0), processed_line, font=font)
-            line_w = line_box[2] - line_box[0]
-        except Exception:
-            line_w = len(processed_line) * (size_pt * scale * 0.5)
-
-        if align == "right":
-            x = W - padding_x - line_w
-        elif align == "left":
-            x = padding_x
-        else:
-            x = int((W - line_w) / 2)
-
-        draw.text((x, y), processed_line, font=font, fill=(20, 20, 20, 255))
-        y += line_h + spacing
-
-    out = io.BytesIO()
-    canvas.save(out, "PNG")
-    return out.getvalue()
-
-def put_text(page, field, value, size=18, align="right", top_align=False):
-    try:
-        for w in list(page.widgets() or []):
-            if w.field_name == field:
-                rect = fitz.Rect(w.rect)
-                try:
-                    page.delete_widget(w)
-                except Exception:
-                    pass
-                if value:
-                    png = _render_value(
-                        value, rect.width, rect.height,
-                        size_pt=size, align=align, top_align=top_align
-                    )
-                    if png:
-                        page.insert_image(rect, stream=png, keep_proportion=False, overlay=True)
-                return True
-    except Exception:
-        pass
-    return False
-
-def put_automatic_fields(doc):
-    try:
-        put_text(doc[0], "Dropdown2", COUNTRY_VALUE, size=18, align="right")
-        put_text(doc[0], YEAR_FIELD, YEAR_VALUE, size=18, align="right")
-    except Exception:
-        pass
 
 # ============================================================
 # FACE DETECTOR
@@ -391,6 +216,18 @@ def put_qr_code(page, field, link_text):
     except Exception:
         return False
 
+def put_editable_link(page, field_name, link_text):
+    """ Шилтемени PDF даяр болгондон кийин да колго өзгөртө турган интерактивдүү талаа катары сактайт """
+    try:
+        for w in list(page.widgets() or []):
+            if w.field_name == field_name:
+                w.field_value = link_text or ""
+                w.update()
+                return True
+    except Exception:
+        pass
+    return False
+
 # ============================================================
 # PDF BUILD
 # ============================================================
@@ -401,32 +238,18 @@ def build(form, files):
     doc = fitz.open(str(TEMPLATE))
     form_dict = dict(form)
 
-    if not (form_dict.get("class_name") or "").strip():
-        form_dict["class_name"] = (form_dict.get("class") or "").strip()
-
-    for k, (p, f) in TEXT.items():
-        value = (form_dict.get(k) or "").strip()
-        top_align = k in ("impact", "notes")
-        size = 18
-        if k in ("impact", "notes"):
-            size = 15
-        elif k == "future_wish":
-            size = 17
-
-        if p < len(doc):
-            put_text(doc[p], f, value, size=size, align="right", top_align=top_align)
-
-    put_automatic_fields(doc)
-
+    # 1. Сүрөттөрдү гана коюу
     for k, (p, f) in IMAGES.items():
-        if k in ("qr_code", "link_area"):
+        if k == "qr_code":
             continue
         if k in files and p < len(doc):
             put_image(doc[p], f, files[k], photo10=(k == "photo10"))
 
+    # 2. QR кодду коюу жана Шилтеме жазылчу талааны даярдоо
     link = (form_dict.get("link") or "").strip()
     if link and 2 < len(doc):
         put_qr_code(doc[2], IMAGES["qr_code"][1], link)
+        put_editable_link(doc[2], "Text8", link)
 
     file_number = (form_dict.get("file_number") or "NO_NUMBER").strip()
     safe_file_number = "".join(c for c in file_number if c.isalnum() or c in ("-", "_"))
@@ -527,14 +350,11 @@ def generate():
                 files[k] = f.read()
 
         form_dict = dict(request.form)
-        if not (form_dict.get("class_name") or "").strip():
-            form_dict["class_name"] = (form_dict.get("class") or "").strip()
-
         file_number = (form_dict.get("file_number") or "").strip()
         if not file_number:
             return jsonify(ok=False, error="Файл № киргизиңиз."), 400
 
-        out = build(request.form, files)
+        out = build(form_dict, files)
         try:
             save_beneficiary(form_dict, out.name)
         except Exception as e:
