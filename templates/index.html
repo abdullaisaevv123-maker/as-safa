@@ -118,28 +118,105 @@
             padding-top: 20px;
         }
 
+        .pdf-list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .pdf-list-header h3 {
+            margin: 0;
+        }
+
+        .pdf-count-badge {
+            background: #eff6ff;
+            color: #1e3a8a;
+            border: 1px solid #bfdbfe;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
         .pdf-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 15px;
+            gap: 12px;
             background: #f8fafc;
             padding: 10px 15px;
-            border-radius: 6px;
+            border-radius: 8px;
             margin-bottom: 8px;
             border: 1px solid #e2e8f0;
+            flex-wrap: wrap;
+        }
+
+        .pdf-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            direction: ltr;
+            text-align: left;
+        }
+
+        .pdf-name {
+            font-weight: 700;
+            font-size: 14px;
+            color: #1e293b;
+            word-break: break-all;
+        }
+
+        .pdf-meta {
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .pdf-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .local-file-btn {
             border: none;
             background: #2563eb;
             color: #fff;
-            padding: 9px 18px;
+            padding: 8px 15px;
             border-radius: 7px;
             font-family: inherit;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 700;
             cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .local-file-btn:hover {
+            background: #1d4ed8;
+        }
+
+        .delete-file-btn {
+            border: 1px solid #fecaca;
+            background: #fef2f2;
+            color: #dc2626;
+            padding: 8px 13px;
+            border-radius: 7px;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .delete-file-btn:hover {
+            background: #fee2e2;
+        }
+
+        .scroll-loader {
+            text-align: center;
+            color: #64748b;
+            font-size: 14px;
+            padding: 14px;
         }
 
         @media (max-width: 700px) {
@@ -147,6 +224,8 @@
             .container { padding: 18px; }
             .form-grid { grid-template-columns: 1fr; }
             .full-width { grid-column: span 1; }
+            .pdf-item { flex-direction: column; align-items: stretch; }
+            .pdf-actions { justify-content: flex-end; }
         }
     </style>
 </head>
@@ -208,17 +287,13 @@
 
     <!-- CREATED PDF FILES -->
     <div class="pdf-list">
-        <h3>الملفات التي تم إنشاؤها (Даяр болгон PDFтер):</h3>
-        <div id="filesContainer">
-            {% for pdf in pdfs %}
-                <div class="pdf-item">
-                    <span>{{ pdf }}</span>
-                    <a href="/download/{{ pdf }}" target="_blank" class="local-file-btn" style="text-decoration:none;">تحميل (Жүктөп алуу)</a>
-                </div>
-            {% else %}
-                <div style="color:#64748b; text-align:center; padding:15px;">Азырынча PDF түзүлө элек.</div>
-            {% endfor %}
+        <div class="pdf-list-header">
+            <h3>الملفات التي تم إنشاؤها (Даяр болгон PDFтер):</h3>
+            <span id="totalBadge" class="pdf-count-badge">0</span>
         </div>
+
+        <div id="filesContainer"></div>
+        <div id="scrollSentinel" class="scroll-loader">Жүктөлүүдө...</div>
     </div>
 
 </div>
@@ -227,7 +302,134 @@
     const form = document.getElementById('reportForm');
     const statusDiv = document.getElementById('status');
     const btn = document.getElementById('submitBtn');
+    const filesContainer = document.getElementById('filesContainer');
+    const scrollSentinel = document.getElementById('scrollSentinel');
+    const totalBadge = document.getElementById('totalBadge');
 
+    let offset = 0;
+    const LIMIT = 10;
+    let isLoading = false;
+    let hasMore = true;
+
+    function createPdfCard(item) {
+        const div = document.createElement('div');
+        div.className = 'pdf-item';
+        div.dataset.id = item.id;
+
+        const createdDate = item.created_at ? item.created_at.replace('T', ' ') : '';
+
+        div.innerHTML = `
+            <div class="pdf-info">
+                <span class="pdf-name">${item.name}</span>
+                <span class="pdf-meta">Файл №: ${item.file_number} ${createdDate ? '• ' + createdDate : ''}</span>
+            </div>
+            <div class="pdf-actions">
+                <a href="${item.url}" target="_blank" class="local-file-btn">تحميل (Жүктөп алуу)</a>
+                <button type="button" class="delete-file-btn" onclick="deletePdfItem(${item.id}, this)">حذف (Удалить)</button>
+            </div>
+        `;
+        return div;
+    }
+
+    async function loadMorePdfs(reset = false) {
+        if (isLoading) return;
+        if (reset) {
+            offset = 0;
+            hasMore = true;
+            filesContainer.innerHTML = '';
+        }
+        if (!hasMore) return;
+
+        isLoading = true;
+        scrollSentinel.style.display = 'block';
+        scrollSentinel.innerText = 'Жүктөлүүдө...';
+
+        try {
+            const res = await fetch(`/api/pdfs?offset=${offset}&limit=${LIMIT}`);
+            const data = await res.json();
+
+            if (data.ok) {
+                totalBadge.innerText = `Баары: ${data.total}`;
+
+                if (data.items.length === 0 && offset === 0) {
+                    filesContainer.innerHTML = '<div id="emptyMsg" style="color:#64748b; text-align:center; padding:15px;">Азырынча PDF түзүлө элек.</div>';
+                    hasMore = false;
+                    scrollSentinel.style.display = 'none';
+                } else {
+                    const emptyMsg = document.getElementById('emptyMsg');
+                    if (emptyMsg) emptyMsg.remove();
+
+                    data.items.forEach(item => {
+                        filesContainer.appendChild(createPdfCard(item));
+                    });
+
+                    offset += data.items.length;
+                    hasMore = data.has_more;
+
+                    if (hasMore) {
+                        scrollSentinel.innerText = 'Дагы жүктөө үчүн ылдый жылдырыңыз...';
+                    } else {
+                        scrollSentinel.innerText = 'Бардык файлдар көрсөтүлдү.';
+                    }
+                }
+            }
+        } catch (err) {
+            scrollSentinel.innerText = 'Тизмени жүктөөдө ката кетти.';
+        } finally {
+            isLoading = false;
+        }
+    }
+
+    async function deletePdfItem(id, buttonEl) {
+        if (!confirm('Бул PDFти сайттын тизмесинен өчүрөсүзбү? (Cloudinary булутунда сакталып кала берет)')) {
+            return;
+        }
+
+        buttonEl.disabled = true;
+        buttonEl.innerText = 'Өчүрүлүүдө...';
+
+        try {
+            const res = await fetch(`/api/pdfs/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+
+            if (data.ok) {
+                const card = buttonEl.closest('.pdf-item');
+                if (card) card.remove();
+                offset = Math.max(0, offset - 1);
+
+                // Эгер баары өчүрүлсө
+                if (filesContainer.children.length === 0) {
+                    loadMorePdfs(true);
+                } else {
+                    // Жалпы санды 1ге азайтуу
+                    const currentTotal = parseInt(totalBadge.innerText.replace(/\D/g, ''), 10) || 1;
+                    totalBadge.innerText = `Баары: ${Math.max(0, currentTotal - 1)}`;
+                }
+            } else {
+                alert('Ката: ' + (data.error || 'Өчүрүлгөн жок'));
+                buttonEl.disabled = false;
+                buttonEl.innerText = 'حذف (Удалить)';
+            }
+        } catch (err) {
+            alert('Сервер катасы.');
+            buttonEl.disabled = false;
+            buttonEl.innerText = 'حذف (Удалить)';
+        }
+    }
+
+    // Ылдый жылдырганда (Infinite Scroll) автоматтык 10дон жүктөө
+    const observer = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoading) {
+            loadMorePdfs(false);
+        }
+    }, { rootMargin: '150px' });
+
+    observer.observe(scrollSentinel);
+
+    // Барак ачылганда биринчи 10 PDFти жүктөө
+    loadMorePdfs(true);
+
+    // Форманы жөнөтүү
     form.onsubmit = async (e) => {
         e.preventDefault();
 
@@ -250,7 +452,8 @@
                     </div>
                 `;
                 form.reset();
-                setTimeout(() => location.reload(), 1800);
+                // Тизмени жаңылоо (жаңы кошулган PDF эң башына чыгат)
+                loadMorePdfs(true);
             } else {
                 statusDiv.innerHTML = `<div style="color:#dc2626; background:#fef2f2; border:1px solid #fecaca; padding:10px; border-radius:7px;">✕ Ката: ${data.error}</div>`;
             }
