@@ -26,7 +26,7 @@ cloudinary.config(
 
 
 def upload_pdf_to_cloudinary(pdf_path, category="armala"):
-    """Даяр болгон PDF файлды Cloudinary булутуна категориясы боюнча жүктөйт"""
+    """PDF файлды Cloudinary булутуна оригиналдуу RAW PDF түрүндө жүктөйт"""
     if not os.environ.get("CLOUDINARY_CLOUD_NAME"):
         return None
     try:
@@ -34,8 +34,8 @@ def upload_pdf_to_cloudinary(pdf_path, category="armala"):
         res = cloudinary.uploader.upload(
             str(pdf_path),
             folder=folder_name,
-            public_id=pdf_path.stem,
-            resource_type="auto",
+            public_id=pdf_path.name,
+            resource_type="raw",
             overwrite=True,
         )
         return res.get("secure_url")
@@ -92,6 +92,7 @@ def init_db():
                 link TEXT,
                 pdf_filename TEXT,
                 cloud_url TEXT,
+                is_downloaded INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL
             )
             """
@@ -99,6 +100,7 @@ def init_db():
         for col_sql in [
             "ALTER TABLE beneficiaries ADD COLUMN cloud_url TEXT",
             "ALTER TABLE beneficiaries ADD COLUMN category TEXT DEFAULT 'armala'",
+            "ALTER TABLE beneficiaries ADD COLUMN is_downloaded INTEGER DEFAULT 0",
         ]:
             try:
                 conn.execute(col_sql)
@@ -106,6 +108,7 @@ def init_db():
                 pass
 
         conn.execute("UPDATE beneficiaries SET category = 'armala' WHERE category IS NULL OR category = ''")
+        conn.execute("UPDATE beneficiaries SET is_downloaded = 0 WHERE is_downloaded IS NULL")
         conn.commit()
     finally:
         conn.close()
@@ -348,62 +351,36 @@ def save_beneficiary(form_dict, pdf_filename, cloud_url=None, category="armala")
         ).fetchone()
 
         if exists:
-            conn.execute(
-                """
-                UPDATE beneficiaries SET
-                    sponsor = ?, beneficiary = ?, beneficiary_number = ?, internal_number = ?,
-                    birth_date = ?, gender = ?, health = ?, class_name = ?, future_wish = ?,
-                    impact = ?, notes = ?, link = ?, pdf_filename = ?, cloud_url = ?, created_at = ?
-                WHERE id = ?
-                """,
-                (
-                    form_dict.get("sponsor", ""),
-                    form_dict.get("beneficiary", ""),
-                    form_dict.get("beneficiary_number", ""),
-                    form_dict.get("internal_number", ""),
-                    form_dict.get("birth_date", ""),
-                    form_dict.get("gender", ""),
-                    form_dict.get("health", ""),
-                    form_dict.get("class_name", ""),
-                    form_dict.get("future_wish", ""),
-                    form_dict.get("impact", ""),
-                    form_dict.get("notes", ""),
-                    form_dict.get("link", ""),
-                    pdf_filename,
-                    cloud_url,
-                    datetime.now().isoformat(timespec="seconds"),
-                    exists["id"],
-                ),
-            )
-        else:
-            conn.execute(
-                """
-                INSERT INTO beneficiaries (
-                    file_number, category, sponsor, beneficiary, beneficiary_number, internal_number,
-                    birth_date, gender, health, class_name, future_wish, impact, notes,
-                    link, pdf_filename, cloud_url, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    file_number,
-                    category,
-                    form_dict.get("sponsor", ""),
-                    form_dict.get("beneficiary", ""),
-                    form_dict.get("beneficiary_number", ""),
-                    form_dict.get("internal_number", ""),
-                    form_dict.get("birth_date", ""),
-                    form_dict.get("gender", ""),
-                    form_dict.get("health", ""),
-                    form_dict.get("class_name", ""),
-                    form_dict.get("future_wish", ""),
-                    form_dict.get("impact", ""),
-                    form_dict.get("notes", ""),
-                    form_dict.get("link", ""),
-                    pdf_filename,
-                    cloud_url,
-                    datetime.now().isoformat(timespec="seconds"),
-                ),
-            )
+            raise ValueError(f"Файл № {file_number} базада мурунтан бар! Кайра жасоо үчүн алгач тизмеден өчүрүңүз.")
+
+        conn.execute(
+            """
+            INSERT INTO beneficiaries (
+                file_number, category, sponsor, beneficiary, beneficiary_number, internal_number,
+                birth_date, gender, health, class_name, future_wish, impact, notes,
+                link, pdf_filename, cloud_url, is_downloaded, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+            """,
+            (
+                file_number,
+                category,
+                form_dict.get("sponsor", ""),
+                form_dict.get("beneficiary", ""),
+                form_dict.get("beneficiary_number", ""),
+                form_dict.get("internal_number", ""),
+                form_dict.get("birth_date", ""),
+                form_dict.get("gender", ""),
+                form_dict.get("health", ""),
+                form_dict.get("class_name", ""),
+                form_dict.get("future_wish", ""),
+                form_dict.get("impact", ""),
+                form_dict.get("notes", ""),
+                form_dict.get("link", ""),
+                pdf_filename,
+                cloud_url,
+                datetime.now().isoformat(timespec="seconds"),
+            ),
+        )
         conn.commit()
     finally:
         conn.close()
@@ -419,10 +396,17 @@ def home():
 
 @app.get("/api/pdfs")
 def list_pdfs():
-    """Категория боюнча (armala же siroty) 10 PDFтен бөлүп кайтарат"""
+    """
+    Категория боюнча 10 PDFтен кайтарат.
+    Сорттоо: алгач жүктөлө электер (is_downloaded = 0) эң үстүндө,
+    анан жүктөлгөндөр (is_downloaded = 1) астында турат.
+    Издөө (q) берилсе Файл № боюнча издейт.
+    """
     category = (request.args.get("category") or "armala").strip().lower()
     if category not in ("armala", "siroty"):
         category = "armala"
+
+    query_text = (request.args.get("q") or "").strip()
 
     try:
         offset = max(0, int(request.args.get("offset", 0)))
@@ -431,20 +415,40 @@ def list_pdfs():
         offset, limit = 0, 10
 
     conn = get_db()
-    total = conn.execute(
-        "SELECT COUNT(*) FROM beneficiaries WHERE category = ?", (category,)
-    ).fetchone()[0]
 
-    rows = conn.execute(
-        """
-        SELECT id, file_number, beneficiary, pdf_filename, cloud_url, created_at, category
-        FROM beneficiaries
-        WHERE category = ?
-        ORDER BY id DESC
-        LIMIT ? OFFSET ?
-        """,
-        (category, limit, offset),
-    ).fetchall()
+    if query_text:
+        like_q = f"%{query_text}%"
+        total = conn.execute(
+            "SELECT COUNT(*) FROM beneficiaries WHERE category = ? AND file_number LIKE ?",
+            (category, like_q),
+        ).fetchone()[0]
+
+        rows = conn.execute(
+            """
+            SELECT id, file_number, beneficiary, pdf_filename, cloud_url, is_downloaded, created_at, category
+            FROM beneficiaries
+            WHERE category = ? AND file_number LIKE ?
+            ORDER BY is_downloaded ASC, id DESC
+            LIMIT ? OFFSET ?
+            """,
+            (category, like_q, limit, offset),
+        ).fetchall()
+    else:
+        total = conn.execute(
+            "SELECT COUNT(*) FROM beneficiaries WHERE category = ?", (category,)
+        ).fetchone()[0]
+
+        rows = conn.execute(
+            """
+            SELECT id, file_number, beneficiary, pdf_filename, cloud_url, is_downloaded, created_at, category
+            FROM beneficiaries
+            WHERE category = ?
+            ORDER BY is_downloaded ASC, id DESC
+            LIMIT ? OFFSET ?
+            """,
+            (category, limit, offset),
+        ).fetchall()
+
     conn.close()
 
     items = []
@@ -459,6 +463,7 @@ def list_pdfs():
             "beneficiary": r["beneficiary"] or "",
             "name": r["pdf_filename"] or f"PDF_{r['file_number']}.pdf",
             "url": url,
+            "is_downloaded": bool(r["is_downloaded"]),
             "created_at": r["created_at"],
         })
 
@@ -470,9 +475,19 @@ def list_pdfs():
     )
 
 
+@app.post("/api/pdfs/<int:item_id>/downloaded")
+def mark_pdf_downloaded(item_id):
+    """PDF бир жолу жүктөлгөнүн белгилейт (түсүн бозортуп, астына түшүрүү үчүн)"""
+    conn = get_db()
+    conn.execute("UPDATE beneficiaries SET is_downloaded = 1 WHERE id = ?", (item_id,))
+    conn.commit()
+    conn.close()
+    return jsonify(ok=True)
+
+
 @app.delete("/api/pdfs/<int:item_id>")
 def delete_pdf_from_site(item_id):
-    """Сайттын тизмесинен гана өчүрөт (Cloudinary булутунан ӨЧПӨЙТ)"""
+    """Сайттын тизмесинен жана базадан өчүрөт (Cloudinary булутунан ӨЧПӨЙТ)"""
     conn = get_db()
     row = conn.execute(
         "SELECT pdf_filename FROM beneficiaries WHERE id = ?", (item_id,)
@@ -507,6 +522,20 @@ def generate():
         file_number = (form_dict.get("file_number") or "").strip()
         if not file_number:
             return jsonify(ok=False, error="Файл № киргизиңиз."), 400
+
+        # Файл № мурунтан бар-жогун PDF түзгөнгө чейин текшерүү
+        conn = get_db()
+        exists = conn.execute(
+            "SELECT id FROM beneficiaries WHERE file_number = ? AND category = ?",
+            (file_number, category),
+        ).fetchone()
+        conn.close()
+
+        if exists:
+            return jsonify(
+                ok=False,
+                error=f"Файл № {file_number} базада бар! Кайра жасоо үчүн алгач тизмеден өчүрүңүз (Удалить)."
+            ), 400
 
         out = build(form_dict, files, category=category)
         cloud_url = upload_pdf_to_cloudinary(out, category=category)
