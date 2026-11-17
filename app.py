@@ -2,6 +2,7 @@ import io
 import os
 import uuid
 import sqlite3
+import urllib.request
 from pathlib import Path
 from datetime import datetime
 
@@ -12,7 +13,7 @@ import fitz
 import numpy as np
 import qrcode
 from PIL import Image, ImageOps
-from flask import Flask, jsonify, render_template, request, send_from_directory, url_for
+from flask import Flask, Response, jsonify, render_template, request, send_from_directory, url_for
 
 # ============================================================
 # CLOUDINARY ЖӨНДӨӨЛӨРҮ
@@ -396,12 +397,6 @@ def home():
 
 @app.get("/api/pdfs")
 def list_pdfs():
-    """
-    Категория боюнча 10 PDFтен кайтарат.
-    Сорттоо: алгач жүктөлө электер (is_downloaded = 0) эң үстүндө,
-    анан жүктөлгөндөр (is_downloaded = 1) астында турат.
-    Издөө (q) берилсе Файл № боюнча издейт.
-    """
     category = (request.args.get("category") or "armala").strip().lower()
     if category not in ("armala", "siroty"):
         category = "armala"
@@ -453,16 +448,13 @@ def list_pdfs():
 
     items = []
     for r in rows:
-        url = r["cloud_url"] or (
-            url_for("download", filename=r["pdf_filename"]) if r["pdf_filename"] else "#"
-        )
         items.append({
             "id": r["id"],
             "file_number": r["file_number"],
             "category": r["category"],
             "beneficiary": r["beneficiary"] or "",
             "name": r["pdf_filename"] or f"PDF_{r['file_number']}.pdf",
-            "url": url,
+            "download_url": url_for("force_download_pdf", item_id=r["id"]),
             "is_downloaded": bool(r["is_downloaded"]),
             "created_at": r["created_at"],
         })
@@ -475,9 +467,55 @@ def list_pdfs():
     )
 
 
+@app.get("/api/pdfs/<int:item_id>/file")
+def force_download_pdf(item_id):
+    """Cloudinary'ге киргизбестен дароо файл катары жүктөйт (Save As терезесин ачат)"""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT pdf_filename, cloud_url FROM beneficiaries WHERE id = ?", (item_id,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return "Файл табылган жок", 404
+
+    conn.execute("UPDATE beneficiaries SET is_downloaded = 1 WHERE id = ?", (item_id,))
+    conn.commit()
+    conn.close()
+
+    filename = row["pdf_filename"] or f"document_{item_id}.pdf"
+    if not filename.lower().endswith(".pdf"):
+        filename += ".pdf"
+
+    # Эгер локалдык папкада бар болсо
+    local_path = GENERATED / filename
+    if local_path.exists():
+        return send_from_directory(
+            GENERATED, filename, as_attachment=True, download_name=filename
+        )
+
+    # Cloudinary'ден алып түз attachment катары берүү
+    cloud_url = row["cloud_url"]
+    if cloud_url:
+        try:
+            req = urllib.request.Request(cloud_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=25) as resp:
+                pdf_bytes = resp.read()
+            return Response(
+                pdf_bytes,
+                mimetype="application/pdf",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"',
+                    "Content-Length": str(len(pdf_bytes)),
+                },
+            )
+        except Exception as e:
+            return f"Жүктөөдө ката кетти: {e}", 502
+
+    return "Файл табылган жок", 404
+
+
 @app.post("/api/pdfs/<int:item_id>/downloaded")
 def mark_pdf_downloaded(item_id):
-    """PDF бир жолу жүктөлгөнүн белгилейт (түсүн бозортуп, астына түшүрүү үчүн)"""
     conn = get_db()
     conn.execute("UPDATE beneficiaries SET is_downloaded = 1 WHERE id = ?", (item_id,))
     conn.commit()
@@ -487,7 +525,7 @@ def mark_pdf_downloaded(item_id):
 
 @app.delete("/api/pdfs/<int:item_id>")
 def delete_pdf_from_site(item_id):
-    """Сайттын тизмесинен жана базадан өчүрөт (Cloudinary булутунан ӨЧПӨЙТ)"""
+    """Бир PDFти сайттан өчүрөт (Cloudinary'ден ӨЧПӨЙТ)"""
     conn = get_db()
     row = conn.execute(
         "SELECT pdf_filename FROM beneficiaries WHERE id = ?", (item_id,)
@@ -503,6 +541,53 @@ def delete_pdf_from_site(item_id):
     conn.commit()
     conn.close()
     return jsonify(ok=True)
+
+
+@app.post("/api/pdfs/bulk-delete")
+def bulk_delete_pdfs():
+    """Тандалган бир нече PDFти же бүт категорияны сайттан өчүрөт (Cloudinary'ден ӨЧПӨЙТ)"""
+    data = request.get_json(silent=True) or {}
+    ids = data.get("ids") or []
+    delete_all_category = data.get("delete_all_category")
+
+    conn = get_db()
+    try:
+        if delete_all_category in ("armala", "siroty"):
+            rows = conn.execute(
+                "SELECT pdf_filename FROM beneficiaries WHERE category = ?",
+                (delete_all_category,),
+            ).fetchall()
+            for r in rows:
+                if r["pdf_filename"]:
+                    (GENERATED / r["pdf_filename"]).unlink(missing_ok=True)
+            conn.execute(
+                "DELETE FROM beneficiaries WHERE category = ?",
+                (delete_all_category,),
+            )
+            conn.commit()
+            return jsonify(ok=True)
+
+        clean_ids = [int(i) for i in ids if str(i).isdigit()]
+        if not clean_ids:
+            return jsonify(ok=False, error="Өчүрүү үчүн файл тандалган жок."), 400
+
+        placeholders = ",".join("?" for _ in clean_ids)
+        rows = conn.execute(
+            f"SELECT pdf_filename FROM beneficiaries WHERE id IN ({placeholders})",
+            clean_ids,
+        ).fetchall()
+        for r in rows:
+            if r["pdf_filename"]:
+                (GENERATED / r["pdf_filename"]).unlink(missing_ok=True)
+
+        conn.execute(
+            f"DELETE FROM beneficiaries WHERE id IN ({placeholders})",
+            clean_ids,
+        )
+        conn.commit()
+        return jsonify(ok=True, deleted_count=len(clean_ids))
+    finally:
+        conn.close()
 
 
 @app.post("/api/generate")
@@ -523,7 +608,6 @@ def generate():
         if not file_number:
             return jsonify(ok=False, error="Файл № киргизиңиз."), 400
 
-        # Файл № мурунтан бар-жогун PDF түзгөнгө чейин текшерүү
         conn = get_db()
         exists = conn.execute(
             "SELECT id FROM beneficiaries WHERE file_number = ? AND category = ?",
@@ -546,16 +630,26 @@ def generate():
             out.unlink(missing_ok=True)
             return jsonify(ok=False, error=str(e)), 400
 
+        # Жаңы жасалган файлдын id'син алуу (түз жүктөө шилтемеси үчүн)
+        conn = get_db()
+        row = conn.execute(
+            "SELECT id FROM beneficiaries WHERE file_number = ? AND category = ?",
+            (file_number, category),
+        ).fetchone()
+        conn.close()
+        new_id = row["id"] if row else None
+
         if cloud_url:
             out.unlink(missing_ok=True)
 
         download_link = (
-            cloud_url if cloud_url else url_for("download", filename=out.name)
+            url_for("force_download_pdf", item_id=new_id)
+            if new_id
+            else (cloud_url or url_for("download", filename=out.name))
         )
         return jsonify(
             ok=True,
             download=download_link,
-            cloud_url=cloud_url,
             file_number=file_number,
             category=category,
         )
