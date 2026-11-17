@@ -30,7 +30,7 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.08);
         }
 
-        /* КАТЕГОРИЯ ТАБДАРЫ (АРМАЛА / СИРОТЫ) */
+        /* КАТЕГОРИЯ ТАБДАРЫ */
         .category-tabs {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -101,7 +101,7 @@
             color: #4b5563;
         }
 
-        input {
+        input[type="text"], input[type="file"] {
             width: 100%;
             padding: 10px 12px;
             border: 1px solid #d1d5db;
@@ -159,7 +159,7 @@
             font-size: 12px;
         }
 
-        /* PDF ТИЗМЕСИ ЖАНА ИЗДӨӨ */
+        /* PDF ТИЗМЕСИ ЖАНА ТОБУ МЕНЕН БАШКАРУУ */
         .pdf-list {
             margin-top: 35px;
             border-top: 2px solid #e5e7eb;
@@ -193,7 +193,7 @@
         .search-bar-box {
             display: flex;
             gap: 8px;
-            margin-bottom: 14px;
+            margin-bottom: 12px;
         }
 
         .search-bar-box input {
@@ -215,6 +215,64 @@
             display: none;
         }
 
+        /* ТАНДОО ЖАНА БААРЫН ӨЧҮРҮҮ ПАНЕЛИ */
+        .bulk-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 9px 14px;
+            border-radius: 9px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .bulk-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .select-all-btn {
+            border: 1.5px solid #2563eb;
+            background: #eff6ff;
+            color: #1d4ed8;
+            padding: 6px 14px;
+            border-radius: 7px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .select-all-btn:hover {
+            background: #dbeafe;
+        }
+
+        .selected-counter {
+            font-size: 13px;
+            font-weight: 700;
+            color: #334155;
+        }
+
+        .bulk-delete-btn {
+            border: none;
+            background: #dc2626;
+            color: #fff;
+            padding: 7px 15px;
+            border-radius: 7px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            display: none;
+        }
+
+        .bulk-delete-btn:hover {
+            background: #b91c1c;
+        }
+
         .pdf-item {
             display: flex;
             justify-content: space-between;
@@ -227,7 +285,20 @@
             border: 1.5px solid #cbd5e1;
             box-shadow: 0 1px 3px rgba(0,0,0,0.04);
             flex-wrap: wrap;
-            transition: all 0.25s ease;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.2s ease;
+        }
+
+        .pdf-item:hover {
+            border-color: #93c5fd;
+        }
+
+        /* Тандалган карточканын стили */
+        .pdf-item.selected-item {
+            border: 2px solid #2563eb !important;
+            background: #eff6ff !important;
+            opacity: 1 !important;
         }
 
         /* Бир жолу жүктөлгөн PDF карточкасынын бозомук стили */
@@ -239,6 +310,34 @@
 
         .pdf-item.downloaded-item .pdf-name {
             color: #64748b;
+        }
+
+        .pdf-left-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .select-check-circle {
+            width: 22px;
+            height: 22px;
+            border-radius: 6px;
+            border: 2px solid #94a3b8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 700;
+            color: #fff;
+            background: #fff;
+            flex-shrink: 0;
+        }
+
+        .pdf-item.selected-item .select-check-circle {
+            background: #2563eb;
+            border-color: #2563eb;
         }
 
         .pdf-info {
@@ -307,7 +406,6 @@
             background: #059669;
         }
 
-        /* Жүктөлгөн баскычтын бозураак өңү */
         .local-file-btn.btn-downloaded {
             background: #94a3b8 !important;
             color: #fff;
@@ -368,38 +466,32 @@
 
         <div class="form-grid">
 
-            <!-- FILE NUMBER -->
             <div class="form-group full-width">
                 <label>رقم الملف (Файл №) - Базага сактоо үчүн</label>
                 <input type="text" name="file_number" id="fileNumber" class="file-number-input" placeholder="Мисалы: 00125" required autocomplete="off">
             </div>
 
-            <!-- LINK FOR QR CODE -->
             <div class="form-group full-width">
                 <label>رابط الفيديو / الملف (Шилتهме - QR код түзүү үчүн)</label>
                 <input type="text" name="link" placeholder="https://...">
             </div>
 
-            <!-- PHOTO 10 -->
             <div class="form-group">
                 <label>الصورة الشخصية (Жеке сүрөт - photo10)</label>
                 <input type="file" name="photo10" id="photo10" accept="image/*">
                 <div class="photo-help">Жүзү автоматтык ортого жайгаштырылат.</div>
             </div>
 
-            <!-- PHOTO 1 -->
             <div class="form-group">
                 <label>الصورة 1 (Сүрөт 1)</label>
                 <input type="file" name="photo1" accept="image/*">
             </div>
 
-            <!-- PHOTO 2 -->
             <div class="form-group">
                 <label>الصورة 2 (Сүрөт 2)</label>
                 <input type="file" name="photo2" accept="image/*">
             </div>
 
-            <!-- PHOTO 3 -->
             <div class="form-group">
                 <label>الصورة 3 (Сүрөт 3)</label>
                 <input type="file" name="photo3" accept="image/*">
@@ -427,6 +519,15 @@
             <button type="button" id="clearSearchBtn" class="clear-search-btn" onclick="clearSearch()">✕</button>
         </div>
 
+        <!-- ВСЕ / ТАНДАЛГАНДАРДЫ ӨЧҮРҮҮ ПАНЕЛИ -->
+        <div class="bulk-toolbar" id="bulkToolbar">
+            <div class="bulk-left">
+                <button type="button" id="selectAllBtn" class="select-all-btn" onclick="toggleSelectAll()">☑ Все (Баарын тандоо)</button>
+                <span id="selectedCounter" class="selected-counter">Тандалды: 0</span>
+            </div>
+            <button type="button" id="bulkDeleteBtn" class="bulk-delete-btn" onclick="deleteSelectedPdfs()">🗑 Тандалгандарды өчүрүү (0)</button>
+        </div>
+
         <div id="filesContainer"></div>
         <div id="scrollSentinel" class="scroll-loader">Жүктөлүүдө...</div>
     </div>
@@ -450,6 +551,9 @@
 
     const searchInput = document.getElementById('searchInput');
     const clearSearchBtn = document.getElementById('clearSearchBtn');
+    const selectedCounter = document.getElementById('selectedCounter');
+    const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+    const selectAllBtn = document.getElementById('selectAllBtn');
 
     let currentCategory = 'armala';
     let currentSearch = '';
@@ -459,11 +563,71 @@
     let hasMore = true;
     let searchTimer = null;
 
+    // Тандалган PDF ID'леринин топтому
+    const selectedIds = new Set();
+    let isAllCategorySelected = false;
+
+    function updateSelectionUI() {
+        const cards = Array.from(filesContainer.querySelectorAll('.pdf-item'));
+        cards.forEach(card => {
+            const id = Number(card.dataset.id);
+            const checkEl = card.querySelector('.select-check-circle');
+            if (isAllCategorySelected || selectedIds.has(id)) {
+                card.classList.add('selected-item');
+                if (checkEl) checkEl.innerText = '✓';
+            } else {
+                card.classList.remove('selected-item');
+                if (checkEl) checkEl.innerText = '';
+            }
+        });
+
+        const totalCount = parseInt(totalBadge.innerText.replace(/\D/g, ''), 10) || 0;
+        const count = isAllCategorySelected ? totalCount : selectedIds.size;
+
+        selectedCounter.innerText = `Тандалды: ${count}`;
+        if (count > 0) {
+            bulkDeleteBtn.style.display = 'inline-block';
+            bulkDeleteBtn.innerText = `🗑 Өчүрүү (${count})`;
+        } else {
+            bulkDeleteBtn.style.display = 'none';
+        }
+
+        if (isAllCategorySelected || (cards.length > 0 && cards.every(c => selectedIds.has(Number(c.dataset.id))))) {
+            selectAllBtn.innerText = '☐ Белгини алуу';
+        } else {
+            selectAllBtn.innerText = '☑ Все (Баарын тандоо)';
+        }
+    }
+
+    function toggleSelectAll() {
+        const cards = Array.from(filesContainer.querySelectorAll('.pdf-item'));
+        if (cards.length === 0) return;
+
+        if (isAllCategorySelected || selectedIds.size > 0) {
+            selectedIds.clear();
+            isAllCategorySelected = false;
+        } else {
+            // Ачылып тургандарды жана эгер издөө жок болсо бүт категорияны тандоо
+            cards.forEach(c => selectedIds.add(Number(c.dataset.id)));
+            if (!currentSearch) {
+                isAllCategorySelected = true;
+            }
+        }
+        updateSelectionUI();
+    }
+
+    function clearSelection() {
+        selectedIds.clear();
+        isAllCategorySelected = false;
+        updateSelectionUI();
+    }
+
     function switchCategory(cat) {
         if (currentCategory === cat && filesContainer.children.length > 0) return;
         currentCategory = cat;
         categoryInput.value = cat;
         statusDiv.innerHTML = '';
+        clearSelection();
 
         if (cat === 'armala') {
             tabArmala.className = 'tab-btn active-armala';
@@ -495,6 +659,18 @@
         div.className = item.is_downloaded ? 'pdf-item downloaded-item' : 'pdf-item';
         div.dataset.id = item.id;
 
+        // Карточканын баскычтардан башка жерин басканда тандоо
+        div.addEventListener('click', (e) => {
+            if (e.target.closest('a') || e.target.closest('button')) return;
+            isAllCategorySelected = false;
+            if (selectedIds.has(item.id)) {
+                selectedIds.delete(item.id);
+            } else {
+                selectedIds.add(item.id);
+            }
+            updateSelectionUI();
+        });
+
         const createdDate = item.created_at ? item.created_at.replace('T', ' ') : '';
         const baseBtnClass = currentCategory === 'siroty' ? 'local-file-btn siroty-dl' : 'local-file-btn';
         const dlBtnClass = item.is_downloaded ? `${baseBtnClass} btn-downloaded` : baseBtnClass;
@@ -504,16 +680,19 @@
             : '<span class="status-pill-new">Жаңы</span>';
 
         div.innerHTML = `
-            <div class="pdf-info">
-                <span class="pdf-name">${item.name}</span>
-                <span class="pdf-meta">
-                    ${statusBadge}
-                    <span>Файл №: <strong>${item.file_number}</strong></span>
-                    ${createdDate ? '<span>• ' + createdDate + '</span>' : ''}
-                </span>
+            <div class="pdf-left-group">
+                <div class="select-check-circle"></div>
+                <div class="pdf-info">
+                    <span class="pdf-name">${item.name}</span>
+                    <span class="pdf-meta">
+                        ${statusBadge}
+                        <span>Файл №: <strong>${item.file_number}</strong></span>
+                        ${createdDate ? '<span>• ' + createdDate + '</span>' : ''}
+                    </span>
+                </div>
             </div>
             <div class="pdf-actions">
-                <a href="${item.url}" target="_blank" class="${dlBtnClass}" onclick="handleDownloadClick(${item.id}, this)">تحميل (Жүктөп алуу)</a>
+                <a href="${item.download_url}" download="${item.name}" class="${dlBtnClass}" onclick="handleDownloadClick(${item.id}, this)">تحميل (Жүктөп алуу)</a>
                 <button type="button" class="delete-file-btn" onclick="deletePdfItem(${item.id}, this)">حذف (Удалить)</button>
             </div>
         `;
@@ -521,7 +700,6 @@
     }
 
     async function handleDownloadClick(id, linkEl) {
-        // Ошол замат бозураак түскө өткөрүү жана астына жылдыруу
         const card = linkEl.closest('.pdf-item');
         if (card && !card.classList.contains('downloaded-item')) {
             card.classList.add('downloaded-item');
@@ -533,7 +711,6 @@
                 pill.innerText = '✓ Жүктөлгөн';
             }
 
-            // Жүктөлө электердин астына (биринчи жүктөлгөн карточканын үстүнө) жылдыруу
             const firstDownloaded = Array.from(filesContainer.children).find(
                 el => el !== card && el.classList.contains('downloaded-item')
             );
@@ -543,7 +720,6 @@
                 filesContainer.appendChild(card);
             }
 
-            // Серверге сактап коюу
             try {
                 await fetch(`/api/pdfs/${id}/downloaded`, { method: 'POST' });
             } catch (e) {}
@@ -605,6 +781,7 @@
                         scrollSentinel.innerText = 'Бардык файлдар көрсөтүлдү.';
                     }
                 }
+                updateSelectionUI();
             }
         } catch (err) {
             scrollSentinel.innerText = 'Тизмени жүктөөдө ката кетти.';
@@ -614,7 +791,7 @@
     }
 
     async function deletePdfItem(id, buttonEl) {
-        if (!confirm('Бул PDFти сайттын тизмесинен өчүрөсүзбү? (Cloudinary булутунда сакталып кала берет жана ушул Файл № менен кайра жасай аласыз)')) {
+        if (!confirm('Бул PDFти сайттын тизмесинен өчүрөсүзбү? (Cloudinary булутунда сакталып кала берет)')) {
             return;
         }
 
@@ -626,6 +803,7 @@
             const data = await res.json();
 
             if (data.ok) {
+                selectedIds.delete(id);
                 const card = buttonEl.closest('.pdf-item');
                 if (card) card.remove();
                 offset = Math.max(0, offset - 1);
@@ -636,6 +814,7 @@
                     const currentTotal = parseInt(totalBadge.innerText.replace(/\D/g, ''), 10) || 1;
                     totalBadge.innerText = `Баары: ${Math.max(0, currentTotal - 1)}`;
                 }
+                updateSelectionUI();
             } else {
                 alert('Ката: ' + (data.error || 'Өчүрүлгөн жок'));
                 buttonEl.disabled = false;
@@ -648,10 +827,48 @@
         }
     }
 
-    // Издөө талаасы (жазганда автоматтык издейт)
+    async function deleteSelectedPdfs() {
+        const totalCount = parseInt(totalBadge.innerText.replace(/\D/g, ''), 10) || 0;
+        const count = isAllCategorySelected ? totalCount : selectedIds.size;
+        if (count === 0) return;
+
+        if (!confirm(`Тандалган ${count} PDF файлды сайттын тизмесинен өчүрөсүзбү? (Cloudinary булутунан ӨЧПӨЙТ)`)) {
+            return;
+        }
+
+        bulkDeleteBtn.disabled = true;
+        bulkDeleteBtn.innerText = 'Өчүрүлүүдө...';
+
+        try {
+            const payload = isAllCategorySelected
+                ? { delete_all_category: currentCategory }
+                : { ids: Array.from(selectedIds) };
+
+            const res = await fetch('/api/pdfs/bulk-delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+
+            if (data.ok) {
+                clearSelection();
+                loadMorePdfs(true);
+            } else {
+                alert('Ката: ' + (data.error || 'Өчүрүлгөн жок'));
+            }
+        } catch (err) {
+            alert('Сервер катасы.');
+        } finally {
+            bulkDeleteBtn.disabled = false;
+            updateSelectionUI();
+        }
+    }
+
     searchInput.addEventListener('input', () => {
         const val = searchInput.value.trim();
         clearSearchBtn.style.display = val ? 'inline-block' : 'none';
+        clearSelection();
         clearTimeout(searchTimer);
         searchTimer = setTimeout(() => {
             currentSearch = val;
@@ -663,10 +880,10 @@
         searchInput.value = '';
         currentSearch = '';
         clearSearchBtn.style.display = 'none';
+        clearSelection();
         loadMorePdfs(true);
     }
 
-    // Ылдый жылдырганда (Infinite Scroll) автоматтык 10дон жүктөө
     const observer = new IntersectionObserver((entries) => {
         if (entries[0].isIntersecting && hasMore && !isLoading) {
             loadMorePdfs(false);
@@ -675,10 +892,8 @@
 
     observer.observe(scrollSentinel);
 
-    // Барак ачылганда биринчи 10 PDFти жүктөө
     loadMorePdfs(true);
 
-    // Форманы жөнөтүү
     form.onsubmit = async (e) => {
         e.preventDefault();
 
@@ -702,12 +917,12 @@
                     <div style="color:#15803d; background:#f0fdf4; border:1px solid #bbf7d0; padding:10px; border-radius:7px;">
                         ✓ تم إنشاء الملف بنجاح!
                         <br><strong>Файл №: ${data.file_number}</strong>
-                        <br><a href="${data.download}" target="_blank" style="color:#15803d; font-weight:700;">اضغط هنا لتحميل الملف</a>
+                        <br><a href="${data.download}" download style="color:#15803d; font-weight:700;">اضغط هنا لتحميل الملف</a>
                     </div>
                 `;
                 form.reset();
                 categoryInput.value = currentCategory;
-                // Издөө күйүп турса тазалап, жаңы жасалган PDFти эң башына чыгаруу
+                clearSelection();
                 if (currentSearch) {
                     clearSearch();
                 } else {
