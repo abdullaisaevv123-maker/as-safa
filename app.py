@@ -4,12 +4,44 @@ import uuid
 import sqlite3
 from pathlib import Path
 from datetime import datetime
+
+import cloudinary
+import cloudinary.uploader
 import cv2
 import fitz
 import numpy as np
 import qrcode
 from PIL import Image, ImageOps
 from flask import Flask, jsonify, render_template, request, send_from_directory, url_for
+
+# ============================================================
+# CLOUDINARY ЖӨНДӨӨЛӨРҮ
+# ============================================================
+cloudinary.config(
+    cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.environ.get("CLOUDINARY_API_KEY"),
+    api_secret=os.environ.get("CLOUDINARY_API_SECRET"),
+    secure=True,
+)
+
+
+def upload_pdf_to_cloudinary(pdf_path):
+    """Даяр болгон PDF файлды Cloudinary булутуна жүктөйт"""
+    if not os.environ.get("CLOUDINARY_CLOUD_NAME"):
+        return None
+    try:
+        res = cloudinary.uploader.upload(
+            str(pdf_path),
+            folder="as_safa_pdfs",
+            public_id=pdf_path.stem,
+            resource_type="auto",
+            overwrite=True,
+        )
+        return res.get("secure_url")
+    except Exception as e:
+        print("Cloudinary жүктөө катасы:", e)
+        return None
+
 
 # ============================================================
 # ПАПКАЛАР
@@ -34,10 +66,12 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
+
 def init_db():
     conn = get_db()
     try:
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS beneficiaries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 file_number TEXT NOT NULL UNIQUE,
@@ -54,19 +88,25 @@ def init_db():
                 notes TEXT,
                 link TEXT,
                 pdf_filename TEXT,
+                cloud_url TEXT,
                 created_at TEXT NOT NULL
             )
-        """)
+            """
+        )
+        try:
+            conn.execute("ALTER TABLE beneficiaries ADD COLUMN cloud_url TEXT")
+        except sqlite3.OperationalError:
+            pass
         conn.commit()
     finally:
         conn.close()
+
 
 init_db()
 
 # ============================================================
 # PDF FIELD NAMES
 # ============================================================
-# Тексттер PDFтин ичине басылып жазылбашы үчүн ТЕКСТтик талаалар өчүрүлдү.
 IMAGES = {
     "photo10": (0, "Image1"),
     "photo1": (2, "Image3"),
@@ -78,19 +118,20 @@ IMAGES = {
 # ============================================================
 # FACE DETECTOR
 # ============================================================
-cascade_path = (cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 if not os.path.exists(cascade_path):
     cascade_path = os.path.join(
         os.path.dirname(cv2.__file__), "data", "haarcascade_frontalface_default.xml"
     )
 FACE_CASCADE = cv2.CascadeClassifier(cascade_path)
 
+
 def prepare_photo10(data):
     try:
         original = Image.open(io.BytesIO(data)).convert("RGB")
         cv_image = cv2.cvtColor(np.array(original), cv2.COLOR_RGB2BGR)
         gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-        
+
         faces = ()
         if not FACE_CASCADE.empty():
             faces = FACE_CASCADE.detectMultiScale(
@@ -123,7 +164,9 @@ def prepare_photo10(data):
             left = max(0, min(left, W - desired_w))
             top = max(0, min(top, H - desired_h))
 
-            crop = original.crop((int(left), int(top), int(left + desired_w), int(top + desired_h)))
+            crop = original.crop(
+                (int(left), int(top), int(left + desired_w), int(top + desired_h))
+            )
         else:
             current_ratio = W / H
             if current_ratio > target_ratio:
@@ -135,12 +178,15 @@ def prepare_photo10(data):
                 top = (H - new_h) // 2
                 crop = original.crop((0, top, W, top + new_h))
 
-        final = ImageOps.fit(crop, (800, 1200), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+        final = ImageOps.fit(
+            crop, (800, 1200), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5)
+        )
         out = io.BytesIO()
         final.save(out, "JPEG", quality=95, optimize=True)
         return out.getvalue()
     except Exception:
         return data
+
 
 def put_image(page, field, data, photo10=False):
     try:
@@ -174,17 +220,24 @@ def put_image(page, field, data, photo10=False):
     except Exception:
         return False
 
+
 # ============================================================
 # QR КОД ЖАНА ШИЛТЕМЕ
 # ============================================================
 def generate_qr_bytes(text):
-    qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=2)
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=10,
+        border=2,
+    )
     qr.add_data(text)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
     b = io.BytesIO()
     img.save(b, "JPEG", quality=95)
     return b.getvalue()
+
 
 def put_qr_code(page, field, link_text):
     try:
@@ -216,8 +269,9 @@ def put_qr_code(page, field, link_text):
     except Exception:
         return False
 
+
 def put_editable_link(page, field_name, link_text):
-    """ Шилтемени PDF даяр болгондон кийин да колго өзгөртө турган интерактивдүү талаа катары сактайт """
+    """Шилтемени PDF даяр болгондон кийин да колго өзгөртө турган интерактивдүү талаа катары сактайт"""
     try:
         for w in list(page.widgets() or []):
             if w.field_name == field_name:
@@ -227,6 +281,7 @@ def put_editable_link(page, field_name, link_text):
     except Exception:
         pass
     return False
+
 
 # ============================================================
 # PDF BUILD
@@ -238,21 +293,21 @@ def build(form, files):
     doc = fitz.open(str(TEMPLATE))
     form_dict = dict(form)
 
-    # 1. Сүрөттөрдү гана коюу
     for k, (p, f) in IMAGES.items():
         if k == "qr_code":
             continue
         if k in files and p < len(doc):
             put_image(doc[p], f, files[k], photo10=(k == "photo10"))
 
-    # 2. QR кодду коюу жана Шилтеме жазылчу талааны даярдоо
     link = (form_dict.get("link") or "").strip()
     if link and 2 < len(doc):
         put_qr_code(doc[2], IMAGES["qr_code"][1], link)
         put_editable_link(doc[2], "Text8", link)
 
     file_number = (form_dict.get("file_number") or "NO_NUMBER").strip()
-    safe_file_number = "".join(c for c in file_number if c.isalnum() or c in ("-", "_"))
+    safe_file_number = "".join(
+        c for c in file_number if c.isalnum() or c in ("-", "_")
+    )
     if not safe_file_number:
         safe_file_number = "NO_NUMBER"
 
@@ -266,10 +321,11 @@ def build(form, files):
     doc.close()
     return out
 
+
 # ============================================================
 # DATABASE SAVE
 # ============================================================
-def save_beneficiary(form_dict, pdf_filename):
+def save_beneficiary(form_dict, pdf_filename, cloud_url=None):
     file_number = (form_dict.get("file_number") or "").strip()
     if not file_number:
         raise ValueError("Файл № киргизилиши керек.")
@@ -281,56 +337,65 @@ def save_beneficiary(form_dict, pdf_filename):
         ).fetchone()
 
         if exists:
-            conn.execute("""
+            conn.execute(
+                """
                 UPDATE beneficiaries SET
                     sponsor = ?, beneficiary = ?, beneficiary_number = ?, internal_number = ?,
                     birth_date = ?, gender = ?, health = ?, class_name = ?, future_wish = ?,
-                    impact = ?, notes = ?, link = ?, pdf_filename = ?, created_at = ?
+                    impact = ?, notes = ?, link = ?, pdf_filename = ?, cloud_url = ?, created_at = ?
                 WHERE file_number = ?
-            """, (
-                form_dict.get("sponsor", ""),
-                form_dict.get("beneficiary", ""),
-                form_dict.get("beneficiary_number", ""),
-                form_dict.get("internal_number", ""),
-                form_dict.get("birth_date", ""),
-                form_dict.get("gender", ""),
-                form_dict.get("health", ""),
-                form_dict.get("class_name", ""),
-                form_dict.get("future_wish", ""),
-                form_dict.get("impact", ""),
-                form_dict.get("notes", ""),
-                form_dict.get("link", ""),
-                pdf_filename,
-                datetime.now().isoformat(timespec="seconds"),
-                file_number,
-            ))
+                """,
+                (
+                    form_dict.get("sponsor", ""),
+                    form_dict.get("beneficiary", ""),
+                    form_dict.get("beneficiary_number", ""),
+                    form_dict.get("internal_number", ""),
+                    form_dict.get("birth_date", ""),
+                    form_dict.get("gender", ""),
+                    form_dict.get("health", ""),
+                    form_dict.get("class_name", ""),
+                    form_dict.get("future_wish", ""),
+                    form_dict.get("impact", ""),
+                    form_dict.get("notes", ""),
+                    form_dict.get("link", ""),
+                    pdf_filename,
+                    cloud_url,
+                    datetime.now().isoformat(timespec="seconds"),
+                    file_number,
+                ),
+            )
         else:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO beneficiaries (
                     file_number, sponsor, beneficiary, beneficiary_number, internal_number,
                     birth_date, gender, health, class_name, future_wish, impact, notes,
-                    link, pdf_filename, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                file_number,
-                form_dict.get("sponsor", ""),
-                form_dict.get("beneficiary", ""),
-                form_dict.get("beneficiary_number", ""),
-                form_dict.get("internal_number", ""),
-                form_dict.get("birth_date", ""),
-                form_dict.get("gender", ""),
-                form_dict.get("health", ""),
-                form_dict.get("class_name", ""),
-                form_dict.get("future_wish", ""),
-                form_dict.get("impact", ""),
-                form_dict.get("notes", ""),
-                form_dict.get("link", ""),
-                pdf_filename,
-                datetime.now().isoformat(timespec="seconds"),
-            ))
+                    link, pdf_filename, cloud_url, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    file_number,
+                    form_dict.get("sponsor", ""),
+                    form_dict.get("beneficiary", ""),
+                    form_dict.get("beneficiary_number", ""),
+                    form_dict.get("internal_number", ""),
+                    form_dict.get("birth_date", ""),
+                    form_dict.get("gender", ""),
+                    form_dict.get("health", ""),
+                    form_dict.get("class_name", ""),
+                    form_dict.get("future_wish", ""),
+                    form_dict.get("impact", ""),
+                    form_dict.get("notes", ""),
+                    form_dict.get("link", ""),
+                    pdf_filename,
+                    cloud_url,
+                    datetime.now().isoformat(timespec="seconds"),
+                ),
+            )
         conn.commit()
     finally:
         conn.close()
+
 
 # ============================================================
 # ROUTES
@@ -339,6 +404,7 @@ def save_beneficiary(form_dict, pdf_filename):
 def home():
     pdfs = sorted([p.name for p in GENERATED.glob("*.pdf")], reverse=True)
     return render_template("index.html", pdfs=pdfs)
+
 
 @app.post("/api/generate")
 def generate():
@@ -355,19 +421,26 @@ def generate():
             return jsonify(ok=False, error="Файл № киргизиңиз."), 400
 
         out = build(form_dict, files)
+        cloud_url = upload_pdf_to_cloudinary(out)
+
         try:
-            save_beneficiary(form_dict, out.name)
+            save_beneficiary(form_dict, out.name, cloud_url=cloud_url)
         except Exception as e:
             out.unlink(missing_ok=True)
             return jsonify(ok=False, error=str(e)), 400
 
+        download_link = (
+            cloud_url if cloud_url else url_for("download", filename=out.name)
+        )
         return jsonify(
             ok=True,
-            download=url_for("download", filename=out.name),
+            download=download_link,
+            cloud_url=cloud_url,
             file_number=file_number,
         )
     except Exception as e:
         return jsonify(ok=False, error=str(e)), 500
+
 
 @app.get("/api/search")
 def search():
@@ -385,14 +458,18 @@ def search():
         return jsonify(ok=False, error=f"Файл № {file_number} табылган жок."), 404
 
     data = dict(row)
-    if data.get("pdf_filename"):
+    if data.get("cloud_url"):
+        data["pdf_url"] = data["cloud_url"]
+    elif data.get("pdf_filename"):
         data["pdf_url"] = url_for("download", filename=data["pdf_filename"])
 
     return jsonify(ok=True, beneficiary=data)
 
+
 @app.get("/download/<path:filename>")
 def download(filename):
     return send_from_directory(GENERATED, filename, as_attachment=True)
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
