@@ -30,11 +30,53 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.08);
         }
 
+        /* КАТЕГОРИЯ ТАБДАРЫ (АРМАЛА / СИРОТЫ) */
+        .category-tabs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 24px;
+            background: #f1f5f9;
+            padding: 8px;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .tab-btn {
+            padding: 14px 16px;
+            border: 2px solid transparent;
+            border-radius: 9px;
+            background: transparent;
+            color: #475569;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .tab-btn:hover {
+            background: #e2e8f0;
+            color: #1e293b;
+        }
+
+        .tab-btn.active-armala {
+            background: #2563eb;
+            color: #fff;
+            box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25);
+        }
+
+        .tab-btn.active-siroty {
+            background: #059669;
+            color: #fff;
+            box-shadow: 0 3px 10px rgba(5, 150, 105, 0.25);
+        }
+
         h1 {
             text-align: center;
             color: #1e3a8a;
-            margin-bottom: 25px;
-            font-size: 24px;
+            margin-bottom: 22px;
+            font-size: 23px;
         }
 
         .form-grid {
@@ -85,10 +127,15 @@
             cursor: pointer;
             width: 100%;
             margin-top: 20px;
+            transition: background 0.2s;
         }
 
         .btn:hover {
-            background: #1d4ed8;
+            opacity: 0.93;
+        }
+
+        .btn-siroty {
+            background: #059669;
         }
 
         .status {
@@ -123,10 +170,13 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 12px;
+            flex-wrap: wrap;
+            gap: 8px;
         }
 
         .pdf-list-header h3 {
             margin: 0;
+            font-size: 17px;
         }
 
         .pdf-count-badge {
@@ -192,8 +242,8 @@
             display: inline-block;
         }
 
-        .local-file-btn:hover {
-            background: #1d4ed8;
+        .local-file-btn.siroty-dl {
+            background: #059669;
         }
 
         .delete-file-btn {
@@ -234,9 +284,21 @@
 
 <div class="container">
 
-    <h1>استمارة تقرير اليتيم</h1>
+    <!-- КАТЕГОРИЯ ТАНДОО БАСКЫЧТАРЫ -->
+    <div class="category-tabs">
+        <button type="button" id="tabArmala" class="tab-btn active-armala" onclick="switchCategory('armala')">
+            📄 PDF Армала (تقرير الأرامل)
+        </button>
+        <button type="button" id="tabSiroty" class="tab-btn" onclick="switchCategory('siroty')">
+            📄 PDF Сироты (تقرير الأيتام)
+        </button>
+    </div>
+
+    <h1 id="pageTitle">استمارة تقرير الأرامل (PDF Армала)</h1>
 
     <form id="reportForm" enctype="multipart/form-data">
+        <input type="hidden" name="category" id="categoryInput" value="armala">
+
         <div class="form-grid">
 
             <!-- FILE NUMBER -->
@@ -279,7 +341,7 @@
         </div>
 
         <button type="submit" class="btn" id="submitBtn">
-            إنشاء ملف PDF (PDF даярдоо)
+            إنشاء ملف PDF Армала (PDF даярдоо)
         </button>
 
         <div id="status" class="status"></div>
@@ -288,8 +350,8 @@
     <!-- CREATED PDF FILES -->
     <div class="pdf-list">
         <div class="pdf-list-header">
-            <h3>الملفات التي تم إنشاؤها (Даяр болгон PDFтер):</h3>
-            <span id="totalBadge" class="pdf-count-badge">0</span>
+            <h3 id="listTitle">Даяр болгон PDF Армала тизмеси:</h3>
+            <span id="totalBadge" class="pdf-count-badge">Баары: 0</span>
         </div>
 
         <div id="filesContainer"></div>
@@ -306,10 +368,49 @@
     const scrollSentinel = document.getElementById('scrollSentinel');
     const totalBadge = document.getElementById('totalBadge');
 
+    const tabArmala = document.getElementById('tabArmala');
+    const tabSiroty = document.getElementById('tabSiroty');
+    const categoryInput = document.getElementById('categoryInput');
+    const pageTitle = document.getElementById('pageTitle');
+    const listTitle = document.getElementById('listTitle');
+    const fileNumberInput = document.getElementById('fileNumber');
+
+    let currentCategory = 'armala';
     let offset = 0;
     const LIMIT = 10;
     let isLoading = false;
     let hasMore = true;
+
+    function switchCategory(cat) {
+        if (currentCategory === cat && filesContainer.children.length > 0) return;
+        currentCategory = cat;
+        categoryInput.value = cat;
+        statusDiv.innerHTML = '';
+
+        if (cat === 'armala') {
+            tabArmala.className = 'tab-btn active-armala';
+            tabSiroty.className = 'tab-btn';
+            pageTitle.innerText = 'استمارة تقرير الأرامل (PDF Армала)';
+            pageTitle.style.color = '#1e3a8a';
+            btn.className = 'btn';
+            btn.innerText = 'إنشاء ملف PDF Армала (PDF даярдоо)';
+            listTitle.innerText = 'Даяр болгон PDF Армала тизмеси:';
+            fileNumberInput.style.borderColor = '#2563eb';
+            fileNumberInput.style.background = '#eff6ff';
+        } else {
+            tabArmala.className = 'tab-btn';
+            tabSiroty.className = 'tab-btn active-siroty';
+            pageTitle.innerText = 'استمارة تقرير الأيتام (PDF Сироты)';
+            pageTitle.style.color = '#065f46';
+            btn.className = 'btn btn-siroty';
+            btn.innerText = 'إنشاء ملف PDF Сироты (PDF даярдоо)';
+            listTitle.innerText = 'Даяр болгон PDF Сироты тизмеси:';
+            fileNumberInput.style.borderColor = '#059669';
+            fileNumberInput.style.background = '#ecfdf5';
+        }
+
+        loadMorePdfs(true);
+    }
 
     function createPdfCard(item) {
         const div = document.createElement('div');
@@ -317,6 +418,7 @@
         div.dataset.id = item.id;
 
         const createdDate = item.created_at ? item.created_at.replace('T', ' ') : '';
+        const dlBtnClass = currentCategory === 'siroty' ? 'local-file-btn siroty-dl' : 'local-file-btn';
 
         div.innerHTML = `
             <div class="pdf-info">
@@ -324,7 +426,7 @@
                 <span class="pdf-meta">Файл №: ${item.file_number} ${createdDate ? '• ' + createdDate : ''}</span>
             </div>
             <div class="pdf-actions">
-                <a href="${item.url}" target="_blank" class="local-file-btn">تحميل (Жүктөп алуу)</a>
+                <a href="${item.url}" target="_blank" class="${dlBtnClass}">تحميل (Жүктөп алуу)</a>
                 <button type="button" class="delete-file-btn" onclick="deletePdfItem(${item.id}, this)">حذف (Удалить)</button>
             </div>
         `;
@@ -332,7 +434,7 @@
     }
 
     async function loadMorePdfs(reset = false) {
-        if (isLoading) return;
+        if (isLoading && !reset) return;
         if (reset) {
             offset = 0;
             hasMore = true;
@@ -341,18 +443,22 @@
         if (!hasMore) return;
 
         isLoading = true;
+        const requestedCategory = currentCategory;
         scrollSentinel.style.display = 'block';
         scrollSentinel.innerText = 'Жүктөлүүдө...';
 
         try {
-            const res = await fetch(`/api/pdfs?offset=${offset}&limit=${LIMIT}`);
+            const res = await fetch(`/api/pdfs?category=${requestedCategory}&offset=${offset}&limit=${LIMIT}`);
             const data = await res.json();
+
+            if (requestedCategory !== currentCategory) return;
 
             if (data.ok) {
                 totalBadge.innerText = `Баары: ${data.total}`;
 
                 if (data.items.length === 0 && offset === 0) {
-                    filesContainer.innerHTML = '<div id="emptyMsg" style="color:#64748b; text-align:center; padding:15px;">Азырынча PDF түзүлө элек.</div>';
+                    const labelName = requestedCategory === 'siroty' ? 'PDF Сироты' : 'PDF Армала';
+                    filesContainer.innerHTML = `<div id="emptyMsg" style="color:#64748b; text-align:center; padding:15px;">Азырынча ${labelName} түзүлө элек.</div>`;
                     hasMore = false;
                     scrollSentinel.style.display = 'none';
                 } else {
@@ -397,11 +503,9 @@
                 if (card) card.remove();
                 offset = Math.max(0, offset - 1);
 
-                // Эгер баары өчүрүлсө
                 if (filesContainer.children.length === 0) {
                     loadMorePdfs(true);
                 } else {
-                    // Жалпы санды 1ге азайтуу
                     const currentTotal = parseInt(totalBadge.innerText.replace(/\D/g, ''), 10) || 1;
                     totalBadge.innerText = `Баары: ${Math.max(0, currentTotal - 1)}`;
                 }
@@ -433,11 +537,16 @@
     form.onsubmit = async (e) => {
         e.preventDefault();
 
+        const defaultBtnText = currentCategory === 'siroty'
+            ? 'إنشاء ملف PDF Сироты (PDF даярдоо)'
+            : 'إنشاء ملف PDF Армала (PDF даярдоо)';
+
         btn.disabled = true;
         btn.innerText = 'جاري المعالجة... (Даярдалууда...)';
         statusDiv.innerHTML = '';
 
         const formData = new FormData(form);
+        formData.set('category', currentCategory);
 
         try {
             const res = await fetch('/api/generate', { method: 'POST', body: formData });
@@ -452,7 +561,7 @@
                     </div>
                 `;
                 form.reset();
-                // Тизмени жаңылоо (жаңы кошулган PDF эң башына чыгат)
+                categoryInput.value = currentCategory;
                 loadMorePdfs(true);
             } else {
                 statusDiv.innerHTML = `<div style="color:#dc2626; background:#fef2f2; border:1px solid #fecaca; padding:10px; border-radius:7px;">✕ Ката: ${data.error}</div>`;
@@ -461,7 +570,7 @@
             statusDiv.innerHTML = `<div style="color:#dc2626; background:#fef2f2; border:1px solid #fecaca; padding:10px; border-radius:7px;">✕ Сервер катасы.</div>`;
         } finally {
             btn.disabled = false;
-            btn.innerText = 'إنشاء ملف PDF (PDF даярдоо)';
+            btn.innerText = defaultBtnText;
         }
     };
 </script>
