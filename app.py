@@ -271,7 +271,6 @@ def put_qr_code(page, field, link_text):
 
 
 def put_editable_link(page, field_name, link_text):
-    """Шилтемени PDF даяр болгондон кийин да колго өзгөртө турган интерактивдүү талаа катары сактайт"""
     try:
         for w in list(page.widgets() or []):
             if w.field_name == field_name:
@@ -402,8 +401,71 @@ def save_beneficiary(form_dict, pdf_filename, cloud_url=None):
 # ============================================================
 @app.get("/")
 def home():
-    pdfs = sorted([p.name for p in GENERATED.glob("*.pdf")], reverse=True)
-    return render_template("index.html", pdfs=pdfs)
+    return render_template("index.html")
+
+
+@app.get("/api/pdfs")
+def list_pdfs():
+    """10 PDFтен бөлүп (pagination) кайтарат"""
+    try:
+        offset = max(0, int(request.args.get("offset", 0)))
+        limit = min(50, max(1, int(request.args.get("limit", 10))))
+    except ValueError:
+        offset, limit = 0, 10
+
+    conn = get_db()
+    total = conn.execute("SELECT COUNT(*) FROM beneficiaries").fetchone()[0]
+    rows = conn.execute(
+        """
+        SELECT id, file_number, beneficiary, pdf_filename, cloud_url, created_at
+        FROM beneficiaries
+        ORDER BY id DESC
+        LIMIT ? OFFSET ?
+        """,
+        (limit, offset),
+    ).fetchall()
+    conn.close()
+
+    items = []
+    for r in rows:
+        url = r["cloud_url"] or (
+            url_for("download", filename=r["pdf_filename"]) if r["pdf_filename"] else "#"
+        )
+        items.append({
+            "id": r["id"],
+            "file_number": r["file_number"],
+            "beneficiary": r["beneficiary"] or "",
+            "name": r["pdf_filename"] or f"PDF_{r['file_number']}.pdf",
+            "url": url,
+            "created_at": r["created_at"],
+        })
+
+    return jsonify(
+        ok=True,
+        items=items,
+        total=total,
+        has_more=(offset + len(items)) < total,
+    )
+
+
+@app.delete("/api/pdfs/<int:item_id>")
+def delete_pdf_from_site(item_id):
+    """Сайттын тизмесинен гана өчүрөт (Cloudinary булутунан ӨЧПӨЙТ)"""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT pdf_filename FROM beneficiaries WHERE id = ?", (item_id,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return jsonify(ok=False, error="Табылган жок."), 404
+
+    if row["pdf_filename"]:
+        (GENERATED / row["pdf_filename"]).unlink(missing_ok=True)
+
+    conn.execute("DELETE FROM beneficiaries WHERE id = ?", (item_id,))
+    conn.commit()
+    conn.close()
+    return jsonify(ok=True)
 
 
 @app.post("/api/generate")
@@ -428,6 +490,10 @@ def generate():
         except Exception as e:
             out.unlink(missing_ok=True)
             return jsonify(ok=False, error=str(e)), 400
+
+        # Булутка сакталган соң сервердеги локалдык файлды өчүрөбүз (диск толбошу үчүн)
+        if cloud_url:
+            out.unlink(missing_ok=True)
 
         download_link = (
             cloud_url if cloud_url else url_for("download", filename=out.name)
