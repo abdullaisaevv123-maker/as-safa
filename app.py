@@ -1,8 +1,10 @@
 import gc
 import io
 import os
+import re
 import uuid
 import sqlite3
+from html import escape as _html_escape
 from pathlib import Path
 from datetime import datetime
 import cloudinary
@@ -51,6 +53,7 @@ def upload_pdf_to_cloudinary(pdf_path, category="armala"):
 BASE = Path(__file__).resolve().parent
 TEMPLATE_ARMALA = BASE / "template.pdf"
 TEMPLATE_SIROTY = BASE / "template_siroty.pdf"
+TEMPLATE_BITOKO = BASE / "template_bitoko.pdf"
 GENERATED = BASE / "generated"
 GENERATED.mkdir(exist_ok=True)
 DATABASE = BASE / "beneficiaries.db"
@@ -75,7 +78,7 @@ def sync_from_cloudinary(conn):
     """Render деплой болгондо Cloudinary'деги PDF тизмесин базага кайра калыбына келтирет"""
     if not os.environ.get("CLOUDINARY_CLOUD_NAME"):
         return
-    for cat in ("armala", "siroty"):
+    for cat in ("armala", "siroty", "bitoko"):
         prefix = f"as_safa_pdfs/{cat}/"
         next_cursor = None
         while True:
@@ -142,6 +145,13 @@ def init_db():
                 impact TEXT,
                 notes TEXT,
                 link TEXT,
+                country TEXT,
+                siblings TEXT,
+                orphan_status TEXT,
+                national_number TEXT,
+                education TEXT,
+                address TEXT,
+                issue_date TEXT,
                 pdf_filename TEXT,
                 cloud_url TEXT,
                 is_downloaded INTEGER DEFAULT 0,
@@ -152,6 +162,13 @@ def init_db():
             "ALTER TABLE beneficiaries ADD COLUMN cloud_url TEXT",
             "ALTER TABLE beneficiaries ADD COLUMN category TEXT DEFAULT 'armala'",
             "ALTER TABLE beneficiaries ADD COLUMN is_downloaded INTEGER DEFAULT 0",
+            "ALTER TABLE beneficiaries ADD COLUMN country TEXT",
+            "ALTER TABLE beneficiaries ADD COLUMN siblings TEXT",
+            "ALTER TABLE beneficiaries ADD COLUMN orphan_status TEXT",
+            "ALTER TABLE beneficiaries ADD COLUMN national_number TEXT",
+            "ALTER TABLE beneficiaries ADD COLUMN education TEXT",
+            "ALTER TABLE beneficiaries ADD COLUMN address TEXT",
+            "ALTER TABLE beneficiaries ADD COLUMN issue_date TEXT",
         ]:
             try:
                 conn.execute(col_sql)
@@ -372,15 +389,250 @@ def put_editable_link(page, field_name, link_text):
 
 
 # ============================================================
-# PDF BUILD
+# BITOKO (بطاقة تعريفية لكفالة الأيتام) ШАБЛОНУ ҮЧҮН ЛОГИКА
+# ============================================================
+BITOKO_FIELDS = {
+    "internal_number": (249, 167, 442, 189),
+    "country": (249, 197, 442, 218),
+    "beneficiary": (249, 227, 442, 247),
+    "siblings": (249, 257, 442, 277),
+    "gender": (249, 287, 442, 307),
+    "birth_date": (249, 316, 442, 336),
+    "national_number": (76, 375, 414, 395),
+    "health": (76, 404, 414, 425),
+    "education": (235, 434, 414, 454),
+    "class_name": (77, 434, 189, 454),
+    "address": (76, 463, 414, 484),
+    "issue_date": (76, 493, 414, 513),
+    "notes": (76, 522, 414, 543),
+}
+
+
+def _has_arabic(text):
+    return any(
+        "\u0600" <= ch <= "\u06ff"
+        or "\u0750" <= ch <= "\u077f"
+        or "\u08a0" <= ch <= "\u08ff"
+        for ch in str(text)
+    )
+
+
+def _format_arabic_text(text):
+    text = str(text or "")
+    if not text:
+        return ""
+    if _has_arabic(text):
+        try:
+            import arabic_reshaper
+            from bidi.algorithm import get_display
+            return get_display(arabic_reshaper.reshape(text))
+        except Exception:
+            return text
+    return text
+
+
+def _bitoko_font_path(bold=True):
+    winfonts = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts")
+    if bold:
+        candidates = [
+            os.path.join(winfonts, "arialbd.ttf"),
+            os.path.join(winfonts, "Arial Bold.ttf"),
+            "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf",
+            "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+            os.path.join(winfonts, "timesbd.ttf"),
+            "/usr/share/fonts/truetype/freefont/FreeSerifBold.ttf",
+        ]
+    else:
+        candidates = [
+            os.path.join(winfonts, "arial.ttf"),
+            "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",
+            "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+            os.path.join(winfonts, "times.ttf"),
+            "/usr/share/fonts/truetype/msttcorefonts/Times_New_Roman.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSerif.ttf",
+        ]
+    candidates += [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+    ]
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate
+    return None
+
+
+def _insert_real_text(page, rect_tuple, value, font_size=14, align="left"):
+    value = str(value or "").strip()
+    if not value:
+        return
+    x0, y0, x1, y1 = rect_tuple
+    rect = fitz.Rect(x0 + 8.0, y0 + 2.0, x1 - 3.0, y1 - 2.0)
+    shaped = _format_arabic_text(value)
+    is_numeric = bool(re.fullmatch(r"[0-9٠-٩۰-۹\s./-]+", value))
+    font_path = _bitoko_font_path(bold=not is_numeric)
+    try:
+        kwargs = {
+            "fontsize": font_size,
+            "align": 2 if align == "right" else (1 if align == "center" else 0),
+            "overlay": True,
+        }
+        if font_path:
+            kwargs.update(fontname="bitokoArabic", fontfile=font_path)
+        else:
+            kwargs.update(fontname="helv")
+        remaining = page.insert_textbox(rect, shaped, **kwargs)
+        if remaining < 0:
+            safe = _html_escape(value).replace("\n", "<br>")
+            html = (
+                '<div dir="rtl" style="font-family:Arial,sans-serif; font-weight:bold; font-size:'
+                f'{font_size}pt; line-height:1.0; color:#111; text-align:left;">{safe}</div>'
+            )
+            page.insert_htmlbox(rect, html, scale_low=1.0, overlay=True)
+    except Exception:
+        safe = _html_escape(value).replace("\n", "<br>")
+        html = (
+            '<div dir="rtl" style="font-family:Arial,sans-serif; font-weight:bold; font-size:'
+            f'{font_size}pt; line-height:1.0; color:#111; text-align:left;">{safe}</div>'
+        )
+        page.insert_htmlbox(rect, html, scale_low=1.0, overlay=True)
+
+
+def _insert_orphan_checkbox(page, status):
+    status = str(status or "").strip().lower()
+    boxes = {
+        "both": fitz.Rect(250, 345, 279, 365),
+        "parents": fitz.Rect(250, 345, 279, 365),
+        "يتيم الأبوين": fitz.Rect(250, 345, 279, 365),
+        "father": fitz.Rect(360, 345, 389, 365),
+        "يتيم الأب": fitz.Rect(360, 345, 389, 365),
+    }
+    for clear_rect in (fitz.Rect(252, 347, 277, 363), fitz.Rect(362, 347, 387, 363)):
+        page.draw_rect(clear_rect, color=None, fill=(1, 1, 1), overlay=True)
+    rect = boxes.get(status)
+    if not rect:
+        return
+    candidates = [
+        os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", "arial.ttf"),
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+    ]
+    font_path = next((p for p in candidates if os.path.exists(p)), None)
+    x = rect.x0 + 7.0
+    y = rect.y0 + 15.0
+    try:
+        if font_path:
+            page.insert_text(
+                (x, y),
+                "√",
+                fontname="checkmarkFont",
+                fontfile=font_path,
+                fontsize=15,
+                color=(0, 0, 0),
+                overlay=True,
+            )
+        else:
+            page.draw_line(
+                (rect.x0 + 7, rect.y0 + 10),
+                (rect.x0 + 12, rect.y0 + 14),
+                color=(0, 0, 0),
+                width=2.0,
+                overlay=True,
+            )
+            page.draw_line(
+                (rect.x0 + 12, rect.y0 + 14),
+                (rect.x0 + 22, rect.y0 + 5),
+                color=(0, 0, 0),
+                width=2.0,
+                overlay=True,
+            )
+    except Exception:
+        page.draw_line(
+            (rect.x0 + 7, rect.y0 + 10),
+            (rect.x0 + 12, rect.y0 + 14),
+            color=(0, 0, 0),
+            width=2.0,
+            overlay=True,
+        )
+        page.draw_line(
+            (rect.x0 + 12, rect.y0 + 14),
+            (rect.x0 + 22, rect.y0 + 5),
+            color=(0, 0, 0),
+            width=2.0,
+            overlay=True,
+        )
+
+
+def build_bitoko(form_dict, files):
+    """Битоко (بطاقة تعريفية لكفالة الأيتام) PDF шаблонун даярдайт"""
+    if not TEMPLATE_BITOKO.exists():
+        raise FileNotFoundError("Шаблон табылган жок: template_bitoko.pdf")
+
+    doc = fitz.open(str(TEMPLATE_BITOKO))
+    try:
+        if len(doc) < 1:
+            raise ValueError("PDF шаблон бош экен.")
+        page = doc[0]
+
+        for key, rect in BITOKO_FIELDS.items():
+            val = form_dict.get(key, "")
+            _insert_real_text(page, rect, val, font_size=14, align="left")
+
+        _insert_orphan_checkbox(page, form_dict.get("orphan_status", ""))
+
+        photo_data = files.get("photo10") or files.get("photo")
+        if photo_data:
+            photo_rect = fitz.Rect(83, 167, 223, 339)
+            try:
+                im = Image.open(io.BytesIO(photo_data)).convert("RGB")
+                im = ImageOps.fit(
+                    im,
+                    (840, 1032),
+                    method=Image.Resampling.LANCZOS,
+                    centering=(0.5, 0.42),
+                )
+                buf = io.BytesIO()
+                im.save(buf, format="JPEG", quality=92, optimize=True)
+                page.insert_image(
+                    photo_rect, stream=buf.getvalue(), keep_proportion=False, overlay=True
+                )
+                im.close()
+                buf.close()
+            except Exception as e:
+                raise ValueError(f"Сүрөттү окуу мүмкүн болгон жок: {e}")
+
+        file_number = (
+            form_dict.get("file_number") or form_dict.get("internal_number") or "NO_NUMBER"
+        ).strip()
+        safe_file_number = (
+            "".join(c for c in file_number if c.isalnum() or c in ("-", "_")) or "NO_NUMBER"
+        )
+
+        filename = (
+            f"PDF_BITOKO_{safe_file_number}_"
+            f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_"
+            f"{uuid.uuid4().hex[:5]}.pdf"
+        )
+        out = GENERATED / filename
+        doc.save(str(out), deflate=True, garbage=3)
+        return out
+    finally:
+        doc.close()
+        gc.collect()
+
+
+# ============================================================
+# PDF BUILD (ARMALA / SIROTY / BITOKO)
 # ============================================================
 def build(form, files, category="armala"):
+    form_dict = dict(form)
+    if category == "bitoko":
+        return build_bitoko(form_dict, files)
+
     template_path = TEMPLATE_SIROTY if category == "siroty" else TEMPLATE_ARMALA
     if not template_path.exists():
         raise FileNotFoundError(f"Шаблон табылган жок: {template_path.name}")
 
     doc = fitz.open(str(template_path))
-    form_dict = dict(form)
     try:
         for k, (p, f) in IMAGES.items():
             if k == "qr_code":
@@ -440,8 +692,10 @@ def save_beneficiary(form_dict, pdf_filename, cloud_url=None, category="armala")
             INSERT INTO beneficiaries (
                 file_number, category, sponsor, beneficiary, beneficiary_number,
                 internal_number, birth_date, gender, health, class_name,
-                future_wish, impact, notes, link, pdf_filename, cloud_url, is_downloaded, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+                future_wish, impact, notes, link,
+                country, siblings, orphan_status, national_number, education, address, issue_date,
+                pdf_filename, cloud_url, is_downloaded, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
             """,
             (
                 file_number,
@@ -458,6 +712,13 @@ def save_beneficiary(form_dict, pdf_filename, cloud_url=None, category="armala")
                 form_dict.get("impact", ""),
                 form_dict.get("notes", ""),
                 form_dict.get("link", ""),
+                form_dict.get("country", ""),
+                form_dict.get("siblings", ""),
+                form_dict.get("orphan_status", ""),
+                form_dict.get("national_number", ""),
+                form_dict.get("education", ""),
+                form_dict.get("address", ""),
+                form_dict.get("issue_date", ""),
                 pdf_filename,
                 cloud_url,
                 datetime.now().isoformat(timespec="seconds"),
@@ -479,7 +740,7 @@ def home():
 @app.get("/api/pdfs")
 def list_pdfs():
     category = (request.args.get("category") or "armala").strip().lower()
-    if category not in ("armala", "siroty"):
+    if category not in ("armala", "siroty", "bitoko"):
         category = "armala"
 
     query_text = (request.args.get("q") or "").strip()
@@ -498,7 +759,7 @@ def list_pdfs():
         ).fetchone()[0]
         rows = conn.execute(
             """
-            SELECT id, file_number, beneficiary, pdf_filename, cloud_url, is_downloaded, created_at, category
+            SELECT *
             FROM beneficiaries
             WHERE category = ? AND file_number LIKE ?
             ORDER BY is_downloaded ASC, id DESC
@@ -512,7 +773,7 @@ def list_pdfs():
         ).fetchone()[0]
         rows = conn.execute(
             """
-            SELECT id, file_number, beneficiary, pdf_filename, cloud_url, is_downloaded, created_at, category
+            SELECT *
             FROM beneficiaries
             WHERE category = ?
             ORDER BY is_downloaded ASC, id DESC
@@ -529,8 +790,23 @@ def list_pdfs():
                 "id": r["id"],
                 "file_number": r["file_number"],
                 "category": r["category"],
+                "sponsor": r["sponsor"] or "",
                 "beneficiary": r["beneficiary"] or "",
-               "name": r["file_number"],
+                "beneficiary_number": r["beneficiary_number"] or "",
+                "internal_number": r["internal_number"] or "",
+                "birth_date": r["birth_date"] or "",
+                "gender": r["gender"] or "",
+                "siblings": r["siblings"] or "",
+                "orphan_status": r["orphan_status"] or "",
+                "national_number": r["national_number"] or "",
+                "health": r["health"] or "",
+                "education": r["education"] or "",
+                "class_name": r["class_name"] or "",
+                "address": r["address"] or "",
+                "country": r["country"] or "",
+                "issue_date": r["issue_date"] or "",
+                "notes": r["notes"] or "",
+                "name": r["file_number"],
                 "download_url": url_for("force_download_pdf", item_id=r["id"]),
                 "is_downloaded": bool(r["is_downloaded"]),
                 "created_at": r["created_at"],
@@ -576,8 +852,6 @@ def force_download_pdf(item_id):
         return send_from_directory(
             GENERATED, storage_filename, as_attachment=True, download_name=download_filename
         )
-
-    return "Файл табылган жок", 404
 
     return "Файл табылган жок", 404
 
@@ -627,7 +901,7 @@ def bulk_delete_pdfs():
 
     conn = get_db()
     try:
-        if delete_all_category in ("armala", "siroty"):
+        if delete_all_category in ("armala", "siroty", "bitoko"):
             rows = conn.execute(
                 "SELECT pdf_filename FROM beneficiaries WHERE category = ?",
                 (delete_all_category,),
@@ -685,8 +959,17 @@ def generate():
     try:
         form_dict = dict(request.form)
         category = (form_dict.get("category") or "armala").strip().lower()
-        if category not in ("armala", "siroty"):
+        if category not in ("armala", "siroty", "bitoko"):
             category = "armala"
+
+        if category == "bitoko":
+            if not (form_dict.get("issue_date") or "").strip():
+                form_dict["issue_date"] = datetime.now().strftime("%d.%m.%Y")
+            if not (form_dict.get("class_name") or "").strip():
+                form_dict["class_name"] = (form_dict.get("class") or "").strip()
+            arabic_name = (form_dict.get("beneficiary_arabic") or "").strip()
+            if arabic_name:
+                form_dict["beneficiary"] = arabic_name
 
         file_number = (form_dict.get("file_number") or "").strip()
         if not file_number:
@@ -704,7 +987,7 @@ def generate():
                 error=f"Файл № {file_number} базада бар! Кайра жасоо үчүн алгач тизмеден өчүрүңүз (Удалить).",
             ), 400
 
-        for k in ("photo10", "photo1", "photo2", "photo3"):
+        for k in ("photo10", "photo1", "photo2", "photo3", "photo"):
             f = request.files.get(k)
             if f and f.filename:
                 files[k] = f.read()
