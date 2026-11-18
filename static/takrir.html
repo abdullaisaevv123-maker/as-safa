@@ -1,683 +1,1331 @@
+<!--
+GOOGLE OAUTH:
+Client ID already configured.
+For local Live Server, add http://127.0.0.1:5500 and/or http://localhost:5500
+to Google Cloud Console -> APIs & Services -> Credentials ->
+this OAuth 2.0 Web client -> Authorized JavaScript origins.
+
+When publishing through GitHub Pages, add the exact GitHub Pages origin,
+for example https://USERNAME.github.io, to Authorized JavaScript origins.
+Do NOT put a Client Secret in this HTML.
+-->
+
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ky">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Такрир — Загрузка в Google Drive и QR-коды</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <style>
-    :root {
-      --bg: #f1f5f9;
-      --surface: #ffffff;
-      --border: #e2e8f0;
-      --text: #0f172a;
-      --muted: #64748b;
-      --accent: #00a884;
-      --accent-dark: #008f72;
-      --accent-soft: #ecfdf5;
-      --blue: #2563eb;
-      --blue-soft: #eff6ff;
-      --danger: #ef4444;
-      --danger-soft: #fef2f2;
-      --warning: #f59e0b;
-      --radius: 14px;
-      --shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Такрир — WhatsApp Style</title>
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.5;
-      min-height: 100vh;
-    }
+<style>
+*{box-sizing:border-box}
 
-    header {
-      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-      color: #fff;
-      padding: 14px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 12px;
-      position: sticky;
-      top: 0;
-      z-index: 40;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.14);
-    }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .brand-icon {
-      width: 40px; height: 40px;
-      border-radius: 11px;
-      background: var(--accent);
-      display: grid; place-items: center;
-      font-size: 20px; font-weight: 800;
-    }
-    .brand h1 { font-size: 1.15rem; font-weight: 700; }
-    .brand span { font-size: 0.8rem; color: #94a3b8; display: block; }
+html,body{
+    width:100%;
+    height:100%;
+    margin:0;
+    padding:0;
+}
 
-    .auth-bar {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    .user-pill {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: rgba(255,255,255,0.1);
-      padding: 6px 12px;
-      border-radius: 999px;
-      font-size: 0.85rem;
-    }
-    .user-pill img {
-      width: 24px; height: 24px; border-radius: 50%;
-    }
-    .status-dot {
-      width: 9px; height: 9px; border-radius: 50%;
-      background: #94a3b8;
-    }
-    .status-dot.online { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+body{
+    font-family:Arial,Helvetica,sans-serif;
+    background:#d1d7db;
+    color:#111827;
+    overflow:hidden;
+}
 
-    button {
-      font-family: inherit;
-      cursor: pointer;
-      border: none;
-      border-radius: 10px;
-      font-weight: 600;
-      font-size: 0.9rem;
-      transition: all 0.16s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 7px;
-    }
-    button:disabled { opacity: 0.55; cursor: not-allowed; }
+button,input{
+    font-family:inherit;
+}
 
-    .btn-primary {
-      background: var(--accent);
-      color: #fff;
-      padding: 10px 18px;
-    }
-    .btn-primary:hover:not(:disabled) { background: var(--accent-dark); }
+button{
+    cursor:pointer;
+}
 
-    .btn-google {
-      background: #fff;
-      color: #0f172a;
-      padding: 9px 16px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-    }
-    .btn-google:hover { background: #f8fafc; }
+:root{
+    --wa-green:#00a884;
+    --wa-green-dark:#008f72;
+    --wa-light:#f0f2f5;
+    --wa-bg:#efeae2;
+    --wa-border:#d8dde1;
+    --wa-muted:#667781;
+    --wa-blue:#53bdeb;
+    --danger:#dc3545;
+    --white:#ffffff;
+}
 
-    .btn-outline {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 8px 14px;
-    }
-    .btn-outline:hover { background: #f8fafc; }
+/* =========================================================
+   LOGIN
+========================================================= */
 
-    .btn-danger-soft {
-      background: var(--danger-soft);
-      color: var(--danger);
-      padding: 7px 11px;
-    }
-    .btn-danger-soft:hover { background: #fee2e2; }
+#loginScreen{
+    position:fixed;
+    inset:0;
+    z-index:9999;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:linear-gradient(135deg,#0b141a,#182229);
+}
 
-    .btn-blue-soft {
-      background: var(--blue-soft);
-      color: var(--blue);
-      padding: 7px 11px;
-    }
-    .btn-blue-soft:hover { background: #dbeafe; }
+.login-wrapper{
+    width:min(430px,92vw);
+    background:#fff;
+    border-radius:18px;
+    padding:35px 30px;
+    box-shadow:0 20px 70px rgba(0,0,0,.35);
+    text-align:center;
+}
 
-    .container {
-      max-width: 1240px;
-      margin: 24px auto;
-      padding: 0 18px;
-      display: grid;
-      grid-template-columns: 380px 1fr;
-      gap: 22px;
-      align-items: start;
-    }
-    @media (max-width: 920px) {
-      .container { grid-template-columns: 1fr; }
-    }
+.login-logo{
+    width:86px;
+    height:86px;
+    margin:0 auto 18px;
+    border-radius:50%;
+    background:var(--wa-green);
+    color:#fff;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:48px;
+}
 
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
-      box-shadow: var(--shadow);
-    }
-    .card-title {
-      font-size: 1.05rem;
-      font-weight: 700;
-      margin-bottom: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
+.login-wrapper h1{
+    margin:0;
+    font-size:27px;
+}
 
-    .field { margin-bottom: 14px; }
-    .field label {
-      display: block;
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: #334155;
-      margin-bottom: 5px;
-    }
-    .input, select {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1.5px solid var(--border);
-      border-radius: 10px;
-      font-size: 0.95rem;
-      font-family: inherit;
-      background: #fff;
-      color: var(--text);
-      transition: border-color 0.15s;
-    }
-    .input:focus, select:focus {
-      outline: none;
-      border-color: var(--accent);
-    }
+.login-wrapper p{
+    color:var(--wa-muted);
+    line-height:1.55;
+}
 
-    .curator-row {
-      display: flex;
-      gap: 8px;
-    }
-    .curator-row select { flex: 1; }
+.google-login-btn{
+    width:100%;
+    border:1px solid #dadce0;
+    background:#fff;
+    color:#202124;
+    padding:14px 18px;
+    border-radius:9px;
+    font-size:16px;
+    font-weight:bold;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:12px;
+    transition:.2s;
+}
 
-    .dropzone {
-      border: 2px dashed #cbd5e1;
-      border-radius: 12px;
-      padding: 24px 16px;
-      text-align: center;
-      background: #f8fafc;
-      cursor: pointer;
-      transition: all 0.18s;
-      margin-bottom: 14px;
-    }
-    .dropzone:hover, .dropzone.dragover {
-      border-color: var(--accent);
-      background: var(--accent-soft);
-    }
-    .dropzone-icon { font-size: 32px; margin-bottom: 6px; }
-    .dropzone p { font-size: 0.9rem; font-weight: 600; color: #334155; }
-    .dropzone small { font-size: 0.78rem; color: var(--muted); }
+.google-login-btn:hover{
+    background:#f8f9fa;
+    box-shadow:0 2px 7px rgba(0,0,0,.12);
+}
 
-    .selected-file {
-      display: none;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      background: var(--accent-soft);
-      border: 1px solid #a7f3d0;
-      padding: 10px 12px;
-      border-radius: 10px;
-      margin-bottom: 14px;
-      font-size: 0.85rem;
-    }
-    .selected-file.visible { display: flex; }
+.google-icon{
+    width:22px;
+    height:22px;
+}
 
-    .progress-wrap {
-      display: none;
-      margin-top: 12px;
-    }
-    .progress-wrap.visible { display: block; }
-    .progress-bar-bg {
-      width: 100%;
-      height: 10px;
-      background: #e2e8f0;
-      border-radius: 999px;
-      overflow: hidden;
-    }
-    .progress-bar-fill {
-      height: 100%;
-      width: 0%;
-      background: linear-gradient(90deg, var(--accent), #10b981);
-      transition: width 0.2s ease;
-    }
-    .progress-text {
-      font-size: 0.8rem;
-      color: var(--muted);
-      margin-top: 5px;
-      display: flex;
-      justify-content: space-between;
-    }
+/* =========================================================
+   APP SHELL & SIDEBAR
+========================================================= */
 
-    .toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-bottom: 16px;
-      align-items: center;
-    }
-    .search-box {
-      flex: 1;
-      min-width: 200px;
-      position: relative;
-    }
-    .search-box input { padding-left: 34px; }
-    .search-box::before {
-      content: "🔍";
-      position: absolute;
-      left: 11px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 0.85rem;
-      opacity: 0.6;
-    }
+#app{
+    display:block;
+    width:100%;
+    height:100vh;
+}
 
-    .stats-row {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-bottom: 16px;
-    }
-    .stat-badge {
-      background: #f8fafc;
-      border: 1px solid var(--border);
-      padding: 6px 12px;
-      border-radius: 999px;
-      font-size: 0.82rem;
-      font-weight: 600;
-      color: #334155;
-    }
-    .stat-badge strong { color: var(--accent-dark); }
+.app-shell{
+    width:100%;
+    height:100%;
+    display:flex;
+    background:#fff;
+}
 
-    .files-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
-      gap: 14px;
-    }
-    .file-card {
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 14px;
-      background: #fff;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      gap: 12px;
-      transition: transform 0.14s, box-shadow 0.14s;
-    }
-    .file-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 20px rgba(15,23,42,0.07);
-    }
-    .file-top {
-      display: flex;
-      gap: 12px;
-      align-items: flex-start;
-    }
-    .qr-thumb {
-      width: 82px;
-      height: 82px;
-      flex-shrink: 0;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 4px;
-      background: #fff;
-      display: grid;
-      place-items: center;
-      cursor: pointer;
-    }
-    .qr-thumb img, .qr-thumb canvas {
-      width: 100% !important;
-      height: 100% !important;
-      object-fit: contain;
-    }
-    .file-meta { flex: 1; min-width: 0; }
-    .file-number {
-      display: inline-block;
-      background: var(--accent-soft);
-      color: var(--accent-dark);
-      font-weight: 800;
-      font-size: 0.92rem;
-      padding: 2px 9px;
-      border-radius: 7px;
-      margin-bottom: 4px;
-    }
-    .file-curator {
-      font-size: 0.85rem;
-      font-weight: 700;
-      color: #1e293b;
-      margin-bottom: 2px;
-    }
-    .file-name {
-      font-size: 0.82rem;
-      color: var(--muted);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .file-date {
-      font-size: 0.75rem;
-      color: #94a3b8;
-      margin-top: 3px;
-    }
-    .file-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      border-top: 1px solid #f1f5f9;
-      padding-top: 10px;
-    }
-    .file-actions button, .file-actions a {
-      font-size: 0.78rem;
-      padding: 6px 10px;
-      border-radius: 8px;
-      text-decoration: none;
-      font-weight: 600;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-    }
+.sidebar{
+    width:350px;
+    min-width:280px;
+    height:100%;
+    background:#fff;
+    border-right:1px solid #d9d9d9;
+    display:flex;
+    flex-direction:column;
+}
 
-    .empty-state {
-      text-align: center;
-      padding: 48px 20px;
-      color: var(--muted);
-      border: 1.5px dashed var(--border);
-      border-radius: 12px;
-    }
+.sidebar-header{
+    height:65px;
+    min-height:65px;
+    background:var(--wa-light);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:8px 14px;
+}
 
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(15, 23, 42, 0.55);
-      display: none;
-      place-items: center;
-      padding: 16px;
-      z-index: 100;
-    }
-    .modal-backdrop.open { display: grid; }
-    .modal {
-      background: #fff;
-      border-radius: 16px;
-      max-width: 440px;
-      width: 100%;
-      padding: 22px;
-      box-shadow: 0 20px 50px rgba(0,0,0,0.25);
-      animation: pop 0.16s ease;
-    }
-    @keyframes pop {
-      from { transform: scale(0.95); opacity: 0; }
-      to { transform: scale(1); opacity: 1; }
-    }
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 14px;
-    }
-    .modal-header h3 { font-size: 1.05rem; }
-    .close-btn {
-      background: #f1f5f9;
-      width: 32px; height: 32px;
-      border-radius: 8px;
-      font-size: 1.1rem;
-    }
+.profile{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    min-width:0;
+}
 
-    .curator-list {
-      max-height: 220px;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-top: 12px;
-    }
-    .curator-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 12px;
-      background: #f8fafc;
-      border: 1px solid var(--border);
-      border-radius: 9px;
-      font-size: 0.9rem;
-      font-weight: 600;
-    }
+.profile-avatar{
+    width:43px;
+    height:43px;
+    min-width:43px;
+    border-radius:50%;
+    object-fit:cover;
+    background:#dfe5e7;
+}
 
-    .qr-modal-box {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 14px;
-      text-align: center;
-    }
-    #bigQrContainer {
-      padding: 14px;
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-    }
+.profile-info{
+    min-width:0;
+}
 
-    .toast {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      background: #0f172a;
-      color: #fff;
-      padding: 12px 18px;
-      border-radius: 11px;
-      font-size: 0.88rem;
-      font-weight: 600;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-      z-index: 200;
-      opacity: 0;
-      transform: translateY(10px);
-      pointer-events: none;
-      transition: all 0.2s;
-    }
-    .toast.show { opacity: 1; transform: translateY(0); }
+.profile-name-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
 
-    .banner-warn {
-      background: #fffbeb;
-      border: 1px solid #fde68a;
-      color: #92400e;
-      padding: 10px 14px;
-      border-radius: 10px;
-      font-size: 0.83rem;
-      margin-bottom: 14px;
-    }
-  </style>
+.profile-name{
+    font-weight:bold;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.profile-year{
+    border:0;
+    background:transparent;
+    color:#00a884;
+    font-weight:800;
+    font-size:16px;
+    cursor:pointer;
+    padding:2px 5px;
+    border-radius:8px;
+}
+
+.profile-email{
+    color:var(--wa-muted);
+    font-size:11px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    max-width:190px;
+}
+
+.header-actions{
+    display:flex;
+    align-items:center;
+    gap:3px;
+}
+
+.circle-btn{
+    width:40px;
+    height:40px;
+    border:0;
+    border-radius:50%;
+    background:transparent;
+    font-size:22px;
+    color:#54656f;
+}
+
+.circle-btn:hover{
+    background:#e2e5e7;
+}
+
+.search-area{
+    padding:8px 12px;
+    background:#fff;
+    border-bottom:1px solid #eee;
+    display:flex;
+    gap:8px;
+    align-items:center;
+}
+
+.search-box{
+    flex:1;
+    height:42px;
+    border:0;
+    outline:none;
+    border-radius:8px;
+    background:#f0f2f5;
+    padding:0 15px;
+    font-size:14px;
+}
+
+.bulk-add-btn{
+    border:0;
+    background:#00a884;
+    color:#fff;
+    width:34px;
+    height:34px;
+    border-radius:50%;
+    font-size:20px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.file-filters{
+    display:flex;
+    gap:8px;
+    padding:4px 14px 10px;
+    background:inherit;
+    overflow-x:auto;
+    white-space:nowrap;
+}
+
+.filter-btn{
+    border:0;
+    background:#eef2f5;
+    color:#54656f;
+    border-radius:18px;
+    padding:7px 15px;
+    font-weight:600;
+    cursor:pointer;
+    font-size:13px;
+}
+
+.filter-btn.active{
+    background:#00a884;
+    color:#fff;
+}
+
+.chat-list{
+    flex:1;
+    overflow-y:auto;
+    overflow-x:hidden;
+}
+
+.chat-item{
+    height:78px;
+    width:100%;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:8px 14px;
+    border:0;
+    border-bottom:1px solid #f0f0f0;
+    background:#fff;
+    text-align:left;
+    cursor:pointer;
+}
+
+.chat-item:hover{
+    background:#f5f6f6;
+}
+
+.chat-item.selected-row{
+    background:#e7f7f2;
+}
+
+.chat-avatar{
+    width:50px;
+    height:50px;
+    min-width:50px;
+    border-radius:50%;
+    background:#dfe5e7;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:13px;
+    font-weight:bold;
+}
+
+.chat-content{
+    min-width:0;
+    flex:1;
+}
+
+.chat-top{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+}
+
+.chat-name{
+    font-size:16px;
+    font-weight:bold;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.chat-time{
+    font-size:11px;
+    color:#667781;
+    white-space:nowrap;
+}
+
+.chat-preview{
+    margin-top:3px;
+    color:#667781;
+    font-size:12px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+/* =========================================================
+   MAIN CHAT AREA
+========================================================= */
+
+.main{
+    flex:1;
+    min-width:0;
+    height:100%;
+    display:flex;
+    flex-direction:column;
+    background:var(--wa-bg);
+    position:relative;
+}
+
+.main-header{
+    height:65px;
+    min-height:65px;
+    background:var(--wa-light);
+    border-bottom:1px solid #d8d8d8;
+    display:flex;
+    align-items:center;
+    padding:8px 18px;
+    gap:12px;
+}
+
+.main-header-avatar{
+    width:43px;
+    height:43px;
+    border-radius:50%;
+    background:#dfe5e7;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:22px;
+}
+
+.main-title-wrap{
+    min-width:0;
+    flex:1;
+}
+
+.main-title{
+    font-weight:bold;
+    font-size:16px;
+}
+
+.main-subtitle{
+    color:#667781;
+    font-size:12px;
+    margin-top:3px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.main-header-actions{
+    display:flex;
+    align-items:center;
+    gap:4px;
+}
+
+.header-icon-btn{
+    width:40px;
+    height:40px;
+    border:0;
+    background:transparent;
+    border-radius:50%;
+    font-size:19px;
+    cursor:pointer;
+    color:#54656f;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.header-icon-btn:hover{
+    background:#e2e5e7;
+}
+
+.message-area{
+    flex:1;
+    overflow-y:auto;
+    overflow-x:hidden;
+    padding:28px;
+    display:flex;
+    justify-content:center;
+    align-items:flex-start;
+    position:relative;
+}
+
+.welcome-box{
+    position:relative;
+    z-index:1;
+    width:min(650px,100%);
+    margin:auto;
+    text-align:center;
+    background:#f8f9fa;
+    border-radius:15px;
+    padding:40px 30px;
+    box-shadow:0 1px 3px rgba(0,0,0,.08);
+    color:#667781;
+}
+
+.welcome-icon{
+    font-size:60px;
+}
+
+.welcome-box h2{
+    color:#374151;
+    margin:12px 0;
+}
+
+/* =========================================================
+   FLOATING PLUS & MENUS
+========================================================= */
+
+.floating-plus{
+    position:fixed;
+    right:24px;
+    bottom:24px;
+    width:58px;
+    height:58px;
+    border:0;
+    border-radius:50%;
+    background:var(--wa-green);
+    color:#fff;
+    font-size:33px;
+    box-shadow:0 4px 12px rgba(0,0,0,.28);
+    z-index:9000;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.floating-plus:hover{
+    background:var(--wa-green-dark);
+}
+
+.more-menu{
+    position:fixed;
+    display:none;
+    top:67px;
+    right:20px;
+    z-index:5000;
+    width:210px;
+    background:#fff;
+    border-radius:9px;
+    overflow:hidden;
+    box-shadow:0 5px 22px rgba(0,0,0,.25);
+}
+
+.more-menu button{
+    display:block;
+    width:100%;
+    border:0;
+    background:#fff;
+    padding:14px 17px;
+    text-align:left;
+    font-size:14px;
+}
+
+.more-menu button:hover{
+    background:#f0f2f5;
+}
+
+/* =========================================================
+   MODALS
+========================================================= */
+
+.modal-overlay{
+    position:fixed;
+    inset:0;
+    z-index:8000;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:15px;
+    background:rgba(0,0,0,.62);
+}
+
+.modal{
+    width:min(480px,96vw);
+    max-height:90vh;
+    overflow:auto;
+    background:#fff;
+    border-radius:15px;
+    padding:25px;
+    box-shadow:0 18px 60px rgba(0,0,0,.35);
+}
+
+.modal.large{
+    width:min(680px,96vw);
+}
+
+.modal h2{
+    margin:0 0 8px;
+}
+
+.modal p{
+    color:#667781;
+}
+
+.modal input[type=text]{
+    width:100%;
+    padding:13px;
+    border:1px solid #d1d5db;
+    border-radius:9px;
+    outline:none;
+}
+
+.modal-actions{
+    display:flex;
+    gap:10px;
+    margin-top:18px;
+}
+
+.modal-actions button{
+    flex:1;
+    border:0;
+    border-radius:9px;
+    padding:12px;
+}
+
+.btn-cancel{
+    background:#e5e7eb;
+    color:#111827;
+}
+
+.btn-green{
+    background:var(--wa-green);
+    color:#fff;
+}
+
+.file-picker-label{
+    display:block;
+    border:2px dashed #b9c4c7;
+    background:#f7f9f9;
+    padding:24px 15px;
+    border-radius:10px;
+    text-align:center;
+    margin-top:14px;
+    cursor:pointer;
+}
+
+.file-picker-label input{
+    display:none;
+}
+
+.selected-file{
+    color:#667781;
+    font-size:13px;
+    margin-top:9px;
+    word-break:break-word;
+}
+
+.upload-progress{
+    width:100%;
+    height:9px;
+    margin-top:16px;
+    border-radius:20px;
+    background:#e5e7eb;
+    display:none;
+    overflow:hidden;
+}
+
+.upload-progress-bar{
+    height:100%;
+    width:0;
+    background:var(--wa-green);
+}
+
+.upload-status{
+    margin-top:12px;
+    font-size:13px;
+    font-weight:bold;
+}
+
+/* =========================================================
+   SETTINGS & OTHER COMPONENTS
+========================================================= */
+
+.settings-item{
+    border:1px solid #e5e7eb;
+    border-radius:11px;
+    padding:17px;
+    margin-top:13px;
+}
+
+.settings-item h3{
+    margin:0 0 7px;
+}
+
+.settings-muted{
+    color:#667781;
+    font-size:13px;
+    line-height:1.5;
+}
+
+.folder-box{
+    background:#f0f2f5;
+    border-radius:9px;
+    padding:13px;
+    margin-top:10px;
+    white-space:pre-wrap;
+    word-break:break-word;
+}
+
+.settings-button{
+    margin-top:11px;
+    border:0;
+    background:var(--wa-green);
+    color:#fff;
+    padding:11px 15px;
+    border-radius:8px;
+}
+
+.account-settings{
+    display:flex;
+    align-items:center;
+    gap:12px;
+}
+
+.account-settings img{
+    width:45px;
+    height:45px;
+    border-radius:50%;
+}
+
+.year-menu{
+    position:absolute;
+    top:70px;
+    left:14px;
+    z-index:10001;
+    background:#fff;
+    border-radius:14px;
+    box-shadow:0 8px 30px rgba(0,0,0,.18);
+    padding:8px;
+    min-width:150px;
+    display:none;
+}
+
+.year-menu button{
+    display:block;
+    width:100%;
+    border:0;
+    background:transparent;
+    text-align:left;
+    padding:10px 14px;
+    border-radius:9px;
+    cursor:pointer;
+}
+
+.year-menu button:hover{
+    background:#e9f8f2;
+}
+
+.toast{
+    position:fixed;
+    left:50%;
+    top:50%;
+    z-index:30000;
+    transform:translate(-50%,-50%);
+    background:rgba(17,24,39,.96);
+    color:#fff;
+    padding:15px 22px;
+    border-radius:14px;
+    box-shadow:0 10px 35px rgba(0,0,0,.28);
+    font-size:15px;
+    font-weight:600;
+    display:none;
+    max-width:90vw;
+    text-align:center;
+}
+
+.clean-file-view{
+    width:min(760px,94%);
+    margin:0 auto;
+    padding:18px 18px 40px;
+    box-sizing:border-box;
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    gap:12px;
+}
+
+.clean-file-top-actions{
+    width:100%;
+    display:flex;
+    justify-content:flex-end;
+    gap:4px;
+}
+
+.clean-file-top-actions button{
+    width:40px;
+    height:40px;
+    border:0;
+    border-radius:50%;
+    background:#fff;
+    color:#54656f;
+    font-size:18px;
+    cursor:pointer;
+    box-shadow:0 1px 3px rgba(0,0,0,.10);
+}
+
+.clean-file-number{
+    font-size:24px;
+    font-weight:700;
+    color:#111b21;
+}
+
+.clean-media{
+    width:100%;
+    max-width:720px;
+    aspect-ratio:16/9;
+    background:#111;
+    border-radius:10px;
+    overflow:hidden;
+}
+
+.clean-media iframe, .clean-media img{
+    width:100%;
+    height:100%;
+    border:0;
+    object-fit:contain;
+}
+
+.clean-qr{
+    width:180px;
+    height:180px;
+    background:#fff;
+    border-radius:10px;
+    padding:8px;
+    box-shadow:0 1px 3px rgba(0,0,0,.12);
+}
+
+.clean-qr img{
+    width:100%;
+    height:100%;
+}
+</style>
 </head>
+
 <body>
 
-  <header>
-    <div class="brand">
-      <div class="brand-icon">QR</div>
-      <div>
-        <h1>Такрир — Загрузка в Google Drive</h1>
-        <span>Папка «Такрир» • Автоматический QR-код с общим доступом</span>
-      </div>
-    </div>
-
-    <div class="auth-bar">
-      <div class="user-pill" id="userStatusPill">
-        <span class="status-dot" id="statusDot"></span>
-        <span id="userLabel">Google Drive не подключён</span>
-      </div>
-      <button class="btn-google" id="btnLogin" onclick="handleGoogleSignIn()">
-        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-        Войти через Google
-      </button>
-      <button class="btn-outline" id="btnLogout" style="display:none; color:#fff; border-color:rgba(255,255,255,0.25);" onclick="handleGoogleSignOut()">
-        Выйти
-      </button>
-    </div>
-  </header>
-
-  <main class="container">
-    <section class="card">
-      <div class="card-title">
-        <span>📤 Новая загрузка</span>
-        <button class="btn-outline" style="font-size:0.78rem; padding:5px 10px;" onclick="openCuratorModal()">
-          👥 Кураторы
+<!-- =======================================================
+ LOGIN SCREEN
+======================================================= -->
+<div id="loginScreen">
+    <div class="login-wrapper">
+        <div class="login-logo">📁</div>
+        <h1>Такрир</h1>
+        <p>Google Drive аркылуу файлдарды башкаруу жана QR-код түзүү тутумуна кош келиңиз.</p>
+        <button class="google-login-btn" type="button" onclick="googleLogin()">
+            <svg class="google-icon" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+            </svg>
+            Войти через Google
         </button>
-      </div>
-
-      <div class="banner-warn" id="authBanner">
-        Нажмите <strong>«Войти через Google»</strong> вверху, чтобы загружать видео и фото в папку <strong>«Такрир»</strong> и автоматически открывать доступ по ссылке.
-      </div>
-
-      <div class="field">
-        <label for="fileNumberInput">Номер файла *</label>
-        <input type="text" id="fileNumberInput" class="input" placeholder="Например: 1245 или №-089" />
-      </div>
-
-      <div class="field">
-        <label for="curatorSelect">Куратор *</label>
-        <div class="curator-row">
-          <select id="curatorSelect"></select>
-          <button type="button" class="btn-outline" title="Добавить куратора" onclick="openCuratorModal()">+</button>
-        </div>
-      </div>
-
-      <div class="field">
-        <label>Видео или фото *</label>
-        <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
-          <div class="dropzone-icon">🎬 📸</div>
-          <p>Нажмите или перетащите видео / фото сюда</p>
-          <small>Поддерживаются MP4, MOV, JPG, PNG и любые другие медиафайлы</small>
-        </div>
-        <input type="file" id="fileInput" accept="video/*,image/*" style="display:none" />
-
-        <div class="selected-file" id="selectedFileBox">
-          <span id="selectedFileName" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
-          <button type="button" class="btn-danger-soft" onclick="clearSelectedFile()">✕</button>
-        </div>
-      </div>
-
-      <button type="button" class="btn-primary" id="btnUpload" style="width:100%; padding:12px;" onclick="uploadToGoogleDrive()">
-        🚀 Загрузить в папку «Такрир» и создать QR
-      </button>
-
-      <div class="progress-wrap" id="progressWrap">
-        <div class="progress-bar-bg">
-          <div class="progress-bar-fill" id="progressFill"></div>
-        </div>
-        <div class="progress-text">
-          <span id="progressLabel">Подготовка...</span>
-          <span id="progressPercent">0%</span>
-        </div>
-      </div>
-    </section>
-
-    <section class="card">
-      <div class="card-title">
-        <span>📁 Файлы в папке «Такрир»</span>
-        <div style="display:flex; gap:8px;">
-          <button class="btn-outline" style="font-size:0.8rem; padding:6px 11px;" onclick="syncFromGoogleDrive()" title="Обновить список из Google Drive">
-            🔄 Синхронизировать
-          </button>
-        </div>
-      </div>
-
-      <div class="toolbar">
-        <div class="search-box">
-          <input type="text" id="searchInput" class="input" placeholder="Поиск по номеру файла или названию..." oninput="renderFiles()" />
-        </div>
-        <select id="filterCurator" style="width:auto; min-width:175px;" onchange="renderFiles()">
-          <option value="ALL">Все кураторы</option>
-        </select>
-      </div>
-
-      <div class="stats-row" id="statsRow"></div>
-      <div id="filesContainer"></div>
-    </section>
-  </main>
-
-  <div class="modal-backdrop" id="curatorModal" onclick="if(event.target===this) closeCuratorModal()">
-    <div class="modal">
-      <div class="modal-header">
-        <h3>👥 Управление кураторами</h3>
-        <button class="close-btn" onclick="closeCuratorModal()">✕</button>
-      </div>
-      <div class="curator-row">
-        <input type="text" id="newCuratorName" class="input" placeholder="Имя нового куратора..." onkeydown="if(event.key==='Enter') addCurator()" />
-        <button class="btn-primary" onclick="addCurator()">Добавить</button>
-      </div>
-      <div class="curator-list" id="curatorList"></div>
+        <p class="login-note" style="color:#667781;font-size:12px;margin-top:15px">Улантуу үчүн Google аккаунтуңузга уруксат бериңиз.</p>
     </div>
-  </div>
+</div>
 
-  <div class="modal-backdrop" id="qrModal" onclick="if(event.target===this) closeQrModal()">
-    <div class="modal">
-      <div class="modal-header">
-        <h3 id="qrModalTitle">QR-код файла</h3>
-        <button class="close-btn" onclick="closeQrModal()">✕</button>
-      </div>
-      <div class="qr-modal-box">
-        <div id="bigQrContainer"></div>
-        <div id="qrModalMeta" style="font-size:0.88rem; color:#475569;"></div>
-        <div style="display:flex; gap:10px; width:100%;">
-          <button class="btn-primary" style="flex:1;" onclick="downloadBigQr()">⬇ Скачать QR-код (PNG)</button>
-          <button class="btn-outline" onclick="copyCurrentQrLink()">📋 Копировать ссылку</button>
-        </div>
-      </div>
+<!-- =======================================================
+ MAIN APPLICATION
+======================================================= -->
+<div id="app" style="display:none">
+    <div class="app-shell" id="appShell">
+        
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="profile">
+                    <img id="userAvatar" class="profile-avatar" src="" alt="avatar">
+                    <div class="profile-info">
+                        <div class="profile-name-row">
+                            <div id="userName" class="profile-name">Такрир</div>
+                            <button id="userYear" class="profile-year" type="button" onclick="event.stopPropagation();toggleYearMenu()">2027</button>
+                        </div>
+                        <div id="userEmail" class="profile-email">-</div>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button class="circle-btn" title="Меню" onclick="toggleMoreMenu()">⋮</button>
+                </div>
+            </div>
+
+            <!-- SEARCH -->
+            <div class="search-area">
+                <input id="searchInput" class="search-box" type="text" placeholder="🔎 Файл номерин издөө..." oninput="renderChatList()">
+                <button id="bulkAddBtn" class="bulk-add-btn" type="button" title="Номер кошуу" onclick="openNumberModal()">＋</button>
+            </div>
+
+            <div class="file-filters" id="fileFilters">
+                <button class="filter-btn active" data-filter="all" onclick="setFileFilter('all')">Баары <small id="filterAllCount">0</small></button>
+                <button class="filter-btn" data-filter="unread" onclick="setFileFilter('unread')">Окулбаган <small id="filterUnreadCount">0</small></button>
+                <button class="filter-btn" data-filter="import" onclick="setFileFilter('import')">Жүктөө <small id="filterImportCount">0</small></button>
+            </div>
+
+            <div id="yearMenu" class="year-menu">
+                <div class="year-title" style="font-size:12px;color:#667781;padding:4px 8px;font-weight:700">Жылды тандаңыз</div>
+                <button onclick="selectTakrirYear(2027)">2027</button>
+                <button onclick="selectTakrirYear(2028)">2028</button>
+                <button onclick="selectTakrirYear(2029)">2029</button>
+                <button onclick="selectTakrirYear(2030)">2030</button>
+            </div>
+
+            <!-- CHAT / FILE LIST -->
+            <div id="chatList" class="chat-list"></div>
+        </aside>
+
+        <!-- MAIN CHAT AREA -->
+        <main class="main">
+            <header id="mainHeader" class="main-header">
+                <div id="mainHeaderAvatar" class="main-header-avatar">🎥</div>
+                <div class="main-title-wrap">
+                    <div id="mainTitle" class="main-title">Такрир</div>
+                    <div id="mainSubtitle" class="main-subtitle">Файл номерин тандаңыз</div>
+                </div>
+                <div class="main-header-actions">
+                    <button class="header-icon-btn" id="headerLinkBtn" title="Ссылка көчүрүү" onclick="copyCurrentFileLink()" style="display:none">🔗</button>
+                    <button class="header-icon-btn" id="headerQrBtn" title="QR код көчүрүү" onclick="copyCurrentFileQR()" style="display:none">▦</button>
+                    <button class="header-icon-btn" id="headerShareBtn" title="Бөлүшүү" onclick="shareCurrentFile()" style="display:none">↗</button>
+                    <button class="circle-btn" title="Меню" onclick="toggleMoreMenu()">⋮</button>
+                </div>
+            </header>
+
+            <!-- MESSAGE AREA -->
+            <section id="messageArea" class="message-area">
+                <div class="welcome-box">
+                    <div class="welcome-icon">💬</div>
+                    <h2>Такрир</h2>
+                    <p>Бул жерден катталган файлдарды WhatsAppтагы чат сыяктуу ача аласыз.</p>
+                    <p>Жаңы видео кошуу үчүн <b>＋</b> баскычын басыңыз.</p>
+                </div>
+            </section>
+        </main>
     </div>
+</div>
+
+<!-- FLOATING PLUS -->
+<button class="floating-plus" title="Файл кошуу" onclick="openNumberModal()">＋</button>
+
+<!-- THREE DOT MENU -->
+<div id="moreMenu" class="more-menu">
+    <button onclick="openSettings()">⚙️ Настройка</button>
+    <button onclick="refreshFiles(); closeMoreMenu();">🔄 Жаңыртуу</button>
+    <button onclick="openAnalytics(); closeMoreMenu();">📊 Аналитика</button>
+</div>
+
+<!-- ANALYTICS MODAL -->
+<div id="analyticsModal" class="modal-overlay" onclick="if(event.target===this)closeAnalytics()">
+  <div class="modal large">
+    <h2>📊 Аналитика</h2>
+    <div id="analyticsContent"></div>
+    <div class="modal-actions"><button class="btn-cancel" onclick="closeAnalytics()">Жабуу</button></div>
   </div>
+</div>
 
-  <div class="toast" id="toast"></div>
+<!-- FILE NUMBER MODAL -->
+<div id="numberModal" class="modal-overlay" onclick="if(event.target===this)closeModal('numberModal')">
+    <div class="modal">
+        <h2>＋ Файл каттоо</h2>
+        <p>Файл номерин киргизиңиз. Мисалы: 001, 025, 154.</p>
+        <input id="fileNumberInput" type="text" placeholder="Файл номери" autocomplete="off">
+        <input id="filePersonInput" type="text" placeholder="Ф.И.О. (кааласаңыз)" style="margin-top:10px">
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeModal('numberModal')">Жокко чыгаруу</button>
+            <button class="btn-green" onclick="continueNumber()">Улантуу</button>
+        </div>
+    </div>
+</div>
 
-  <script>
-    const GOOGLE_CLIENT_ID = '252431730992-23f5r72b4iq9j9nvh42nufb3d7u4983j.apps.googleusercontent.com';
-    const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
-    const FOLDER_NAME = 'Такрир';
+<!-- VIDEO SELECT MODAL -->
+<div id="videoModal" class="modal-overlay" onclick="if(event.target===this)closeModal('videoModal')">
+    <div class="modal">
+        <h2>🎥 Файл тандоо</h2>
+        <p id="selectedNumberText">Файл номери:</p>
+        <label class="file-picker-label">
+            <strong id="mediaPickerTitle">📂 Видео же сүрөт тандоо</strong>
+            <br>
+            <span id="mediaPickerHint" style="color:#667781;font-size:13px">Файлды ушул жерден тандаңыз</span>
+            <input id="videoInput" type="file" accept="video/*,image/*">
+        </label>
+        <div id="selectedFileName" class="selected-file">Файл тандала элек</div>
+        <div class="upload-progress" id="uploadProgress">
+            <div class="upload-progress-bar" id="uploadProgressBar"></div>
+        </div>
+        <div class="upload-status" id="uploadStatus"></div>
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="backToNumber()">Артка</button>
+            <button id="registerButton" class="btn-green" disabled onclick="registerVideo()">Каттоо</button>
+        </div>
+    </div>
+</div>
 
-    let tokenClient = null;
-    let accessToken = null;
-    let tokenExpiresAt = 0;
-    let currentUser = null;
-    let takrirFolderId = null;
-    let selectedFile = null;
-    let activeQrItem = null;
+<!-- SETTINGS MODAL -->
+<div id="settingsModal" class="modal-overlay" onclick="if(event.target===this)closeModal('settingsModal')">
+    <div class="modal large">
+        <h2>⚙️ Настройка</h2>
+        <div class="settings-item">
+            <h3>👤 Аккаунт</h3>
+            <div class="account-settings">
+                <img id="settingsAvatar" src="" alt="">
+                <div>
+                    <b id="settingsName">-</b>
+                    <div id="settingsEmail" class="settings-muted">-</div>
+                    <div id="accountActionBox" style="margin-top:8px"></div>
+                </div>
+            </div>
+        </div>
+        <div class="settings-item">
+            <h3>📁 Google Drive папкасы</h3>
+            <div class="settings-muted">Видео кайсы Google Drive папкасына сакталары ушул жерде көрсөтүлөт.</div>
+            <div id="driveFolderBox" class="folder-box">Папка тандала элек.</div>
+            <button class="settings-button" onclick="selectDriveFolder()">📂 Google Drive'дан папка тандоо</button>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeModal('settingsModal')">Жабуу</button>
+        </div>
+    </div>
+</div>
 
-    const DEFAULT_CURATORS = ['Куратор 1', 'Куратор 2', 'Куратор 3'];
+<!-- FOLDER PICKER MODAL -->
+<div id="folderPickerModal" class="modal-overlay" onclick="if(event.target===this)closeFolderPicker()">
+    <div class="modal large">
+        <h2>📁 Google Drive папкасын тандоо</h2>
+        <div id="folderPickerPath" class="settings-muted">My Drive</div>
+        <div id="driveFolderList" class="folder-box" style="max-height:50vh;overflow:auto"></div>
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeFolderPicker()">Жабуу</button>
+        </div>
+    </div>
+</div>
 
-    function storageKey(base) {
-      const uid = currentUser?.email || 'guest';
-      return `${base}_${uid}`;
+<div id="toast" class="toast"></div>
+
+<!-- =======================================================
+ JAVASCRIPT LOGIC
+======================================================= -->
+<script>
+const GOOGLE_CLIENT_ID = "1070875797774-03j7qfohho2n7f2s2cvjbiqmasi55gue.apps.googleusercontent.com";
+const DRIVE_SCOPE = ["openid", "email", "profile", "https://www.googleapis.com/auth/drive"].join(" ");
+
+let currentUser = null;
+let driveAccessToken = null;
+let tokenClient = null;
+let selectedFileNumber = "";
+let selectedVideoFile = null;
+let currentFileId = null;
+let takrirYear = 2027;
+let fileFilter = 'all';
+
+function loadGoogleIdentityServices(callback){
+    if(window.google && google.accounts && google.accounts.oauth2){
+        callback();
+        return;
     }
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.onload = callback;
+    document.head.appendChild(script);
+}
 
-    function getCurators() {
-      const raw = localStorage.getItem(storageKey('takrir_curators'));
-      if (!raw) {
-        localStorage.setItem(storageKey('takrir_curators'), JSON.stringify(DEFAULT_CURATORS));
-        return [...DEFAULT_CURATORS];
-      }
-      try { return JSON.parse(raw); } catch { return [...DEFAULT_CURATORS]; }
+function googleLogin(){
+    loadGoogleIdentityServices(function(){
+        if(!tokenClient){
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: GOOGLE_CLIENT_ID,
+                scope: DRIVE_SCOPE,
+                callback: async function(response){
+                    if(response?.access_token){
+                        driveAccessToken = response.access_token;
+                        await loadGoogleUser();
+                        showToast("✅ Ийгиликтүү кирдиңиз");
+                    } else {
+                        showToast("Google уруксаты берилген жок.");
+                    }
+                }
+            });
+        }
+        tokenClient.requestAccessToken({prompt: "select_account"});
+    });
+}
+
+async function loadGoogleUser(){
+    try{
+        const r = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+            headers: { Authorization: "Bearer " + driveAccessToken }
+        });
+        if(!r.ok) throw new Error("Userinfo error");
+        currentUser = await r.json();
+        localStorage.setItem("takrir_google_user", JSON.stringify(currentUser));
+        updateUserUI();
+        document.getElementById("loginScreen").style.display = "none";
+        document.getElementById("app").style.display = "block";
+        await syncFilesFromDrive();
+    }catch(e){
+        showToast("Маалымат алууда ката кетти.");
     }
+}
 
-    function saveCurators(list) {
-      localStorage.setItem(storageKey('takrir_curators'), JSON.stringify(list));
-      refreshCuratorSelects();
-      renderCuratorModalList();
+function updateUserUI(){
+    if(!currentUser) return;
+    const picture = currentUser.picture || "";
+    document.getElementById("userAvatar").src = picture;
+    document.getElementById("settingsAvatar").src = picture;
+    document.getElementById("userName").textContent = currentUser.name || "Такрир";
+    document.getElementById("userEmail").textContent = currentUser.email || "";
+    document.getElementById("settingsName").textContent = currentUser.name || "Такрир";
+    document.getElementById("settingsEmail").textContent = currentUser.email || "";
+    document.getElementById("accountActionBox").innerHTML = '<button type="button" class="settings-button" style="background:#dc3545" onclick="logoutUser()">Чыгуу</button>';
+}
+
+function logoutUser(){
+    currentUser = null;
+    driveAccessToken = null;
+    localStorage.removeItem("takrir_google_user");
+    document.getElementById("app").style.display = "none";
+    document.getElementById("loginScreen").style.display = "flex";
+    showToast("Аккаунттан чыктыңыз.");
+}
+
+function userStorageKey(){ return "takrir_files_" + (currentUser?.sub || currentUser?.email || "guest"); }
+function getFiles(){
+    try{ return JSON.parse(localStorage.getItem(userStorageKey()) || "[]"); }
+    catch(e){ return []; }
+}
+function saveFiles(files){ localStorage.setItem(userStorageKey(), JSON.stringify(files)); }
+
+function getSelectedFolder(){
+    try{ return JSON.parse(localStorage.getItem("takrir_folder") || "null"); }
+    catch(e){ return null; }
+}
+function saveSelectedFolder(folder){ localStorage.setItem("takrir_folder", JSON.stringify(folder)); }
+
+function ensureDriveToken(){
+    if(driveAccessToken) return Promise.resolve(driveAccessToken);
+    return new Promise((resolve, reject) => {
+        tokenClient.callback = (resp) => {
+            if(resp?.access_token){
+                driveAccessToken = resp.access_token;
+                resolve(driveAccessToken);
+            } else {
+                reject(new Error("Token error"));
+            }
+        };
+        tokenClient.requestAccessToken({prompt: ""});
+    });
+}
+
+function openNumberModal(){
+    document.getElementById("fileNumberInput").value = "";
+    document.getElementById("filePersonInput").value = "";
+    document.getElementById("numberModal").style.display = "flex";
+}
+function closeModal(id){ document.getElementById(id).style.display = "none"; }
+
+function continueNumber(){
+    const input = document.getElementById("fileNumberInput");
+    const num = input.value.trim();
+    if(!num){ showToast("Файл номерин киргизиңиз."); return; }
+    selectedFileNumber = num;
+    document.getElementById("selectedNumberText").textContent = "Файл номери: " + num;
+    closeModal("numberModal");
+    document.getElementById("videoModal").style.display = "flex";
+}
+
+function backToNumber(){
+    closeModal("videoModal");
+    openNumberModal();
+}
+
+document.getElementById("videoInput").addEventListener("change", function(){
+    selectedVideoFile = this.files?.[0] || null;
+    if(selectedVideoFile){
+        document.getElementById("selectedFileName").textContent = "Тандалды: " + selectedVideoFile.name;
+        document.getElementById("registerButton").disabled = false;
     }
+});
 
-    function getFiles() {
-      const raw = localStorage.getItem(storageKey('takrir_files'));
-      if (!raw) return [];
-      try { return JSON.parse(raw); } catch { return []; }
+async function registerVideo(){
+    if(!selectedVideoFile || !selectedFileNumber) return;
+    const folder = getSelectedFolder();
+    document.getElementById("uploadProgress").style.display = "block";
+    document.getElementById("uploadProgressBar").style.width = "50%";
+    document.getElementById("uploadStatus").textContent = "Жүктөлүүдө...";
+
+    try{
+        const token = await ensureDriveToken();
+        const metadata = {
+            name: selectedVideoFile.name,
+            mimeType: selectedVideoFile.type || "video/mp4",
+            appProperties: { takrir: "1", fileNumber: selectedFileNumber }
+        };
+        if(folder?.id) metadata.parents = [folder.id];
+
+        const form = new FormData();
+        form.append("metadata", new Blob([JSON.stringify(metadata)], {type: "application/json"}));
+        form.append("file", selectedVideoFile);
+
+        const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+            method: "POST",
+            headers: { Authorization: "Bearer " + token },
+            body: form
+        });
+        if(!res.ok) throw new Error("Upload failed");
+        const data = await res.json();
+
+        const files = getFiles();
+        files.unshift({
+            id: data.id,
+            driveId: data.id,
+            number: selectedFileNumber,
+            name: selectedVideoFile.name,
+            url: "https://drive.google.com/file/d/" + data.id + "/view?usp=sharing",
+            date: new Date().toLocaleString("ky-KG"),
+            unread: true,
+            year: takrirYear
+        });
+        saveFiles(files);
+        closeModal("videoModal");
+        renderChatList();
+        showToast("✅ Ийгиликтүү катталды");
+    }catch(e){
+        document.getElementById("uploadStatus").textContent = "❌ Ката кетти.";
     }
+}
 
-    function saveFiles(list) {
-      localStorage.setItem(storageKey('takrir_files'), JSON.stringify(list));
-      renderFiles();
+function renderChatList(){
+    const list = document.getElementById("chatList");
+    const q = (document.getElementById("searchInput").value || "").toLowerCase();
+    const files = getFiles().filter(f => String(f.number).toLowerCase().includes(q));
+    
+    if(!files.length){
+        list.innerHTML = '<div style="padding:28px;text-align:center;color:#667781">Файл номерлери жок</div>';
+        return;
     }
+    list.innerHTML = files.map(f => `
+        <div class="chat-item" onclick="openFile('${f.id}')">
+            <div class="chat-avatar"><span>${f.number}</span></div>
+            <div class="chat-content">
+                <div class="chat-top">
+                    <div class="chat-name">${f.number}</div>
+                    <div class="chat-time">${f.date}</div>
+                </div>
+                <div class="chat-preview">${f.name}</div>
+            </div>
+        </div>
+    `).join("");
+}
 
-    function showToast(msg) {
-      const el = document
+function openFile(id){
+    const f = getFiles().find(x => String(x.id) === String(id));
+    if(!f) return;
+    currentFileId = f.id;
+    document.getElementById("mainTitle").textContent = f.number;
+    document.getElementById("mainSubtitle").textContent = "Файл: " + f.number;
+    document.getElementById("headerLinkBtn").style.display = "inline-flex";
+    document.getElementById("headerQrBtn").style.display = "inline-flex";
+
+    const shareUrl = f.url;
+    const previewUrl = "https://drive.google.com/file/d/" + f.driveId + "/preview";
+    const qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=" + encodeURIComponent(shareUrl);
+
+    document.getElementById("messageArea").innerHTML = `
+        <div class="clean-file-view">
+            <div class="clean-file-number">№ ${f.number}</div>
+            <div class="clean-media"><iframe src="${previewUrl}" allowfullscreen></iframe></div>
+            <div class="clean-qr"><img src="${qrUrl}" alt="QR"></div>
+        </div>
+    `;
+}
+
+function showToast(msg){
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.style.display = "block";
+    setTimeout(() => t.style.display = "none", 3000);
+}
+
+function toggleMoreMenu(){
+    const m = document.getElementById("moreMenu");
+    m.style.display = m.style.display === "block" ? "none" : "block";
+}
+
+function openSettings(){
+    toggleMoreMenu();
+    document.getElementById("settingsModal").style.display = "flex";
+}
+
+async function selectDriveFolder(){
+    try{
+        const token = await ensureDriveToken();
+        const res = await fetch("https://www.googleapis.com/drive/v3/files?q=mimeType='application/vnd.google-apps.folder' and trashed=false", {
+            headers: { Authorization: "Bearer " + token }
+        });
+        const data = await res.json();
+        const list = document.getElementById("driveFolderList");
+        list.innerHTML = (data.files || []).map(folder => `
+            <div style="padding:10px;cursor:pointer;border-bottom:1px solid #eee" onclick="chooseFolder('${folder.id}', '${folder.name}')">
+                📁 ${folder.name}
+            </div>
+        `).join("");
+        document.getElementById("folderPickerModal").style.display = "flex";
+    }catch(e){
+        showToast("Папкаларды жүктөө мүмкүн болгон жок.");
+    }
+}
+
+function chooseFolder(id, name){
+    saveSelectedFolder({id, name});
+    document.getElementById("driveFolderBox").textContent = "Таңдалды: " + name;
+    closeFolderPicker();
+    showToast("✅ Папка сакталды");
+}
+
+function closeFolderPicker(){ document.getElementById("folderPickerModal").style.display = "none"; }
+
+async function syncFilesFromDrive(){
+    try{
+        const token = await ensureDriveToken();
+        const res = await fetch("https://www.googleapis.com/drive/v3/files?q=trashed=false and appProperties has { key='takrir' }", {
+            headers: { Authorization: "Bearer " + token }
+        });
+        const data = await res.json();
+        const files = (data.files || []).map(f => ({
+            id: f.id,
+            driveId: f.id,
+            number: f.appProperties?.fileNumber || "000",
+            name: f.name,
+            url: "https://drive.google.com/file/d/" + f.id + "/view?usp=sharing",
+            date: new Date().toLocaleString("ky-KG"),
+            unread: false
+        }));
+        saveFiles(files);
+        renderChatList();
+    }catch(e){console.error(e);}
+}
+
+function refreshFiles(){ syncFilesFromDrive(); showToast("Жаңыртылды"); }
+
+document.addEventListener("DOMContentLoaded", () => {
+    const saved = localStorage.getItem("takrir_google_user");
+    if(saved){
+        currentUser = JSON.parse(saved);
+        updateUserUI();
+        document.getElementById("loginScreen").style.display = "none";
+        document.getElementById("app").style.display = "block";
+        renderChatList();
+    }
+});
+</script>
+
+</body>
+</html>
