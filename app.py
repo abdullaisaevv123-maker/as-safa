@@ -550,7 +550,7 @@ def force_download_pdf(item_id):
     """Сервердин RAM'ын колдонбой, түз Cloudinary'ден көчүрүп берүү"""
     conn = get_db()
     row = conn.execute(
-        "SELECT pdf_filename, cloud_url FROM beneficiaries WHERE id = ?", (item_id,)
+        "SELECT file_number, pdf_filename, cloud_url FROM beneficiaries WHERE id = ?", (item_id,)
     ).fetchone()
     if not row:
         conn.close()
@@ -560,22 +560,24 @@ def force_download_pdf(item_id):
     conn.commit()
     conn.close()
 
-    filename = row["pdf_filename"] or f"document_{item_id}.pdf"
-    if not filename.lower().endswith(".pdf"):
-        filename += ".pdf"
+    safe_num = "".join(c for c in (row["file_number"] or str(item_id)) if c.isalnum() or c in ("-", "_"))
+    download_filename = f"{safe_num}.pdf"
+    storage_filename = row["pdf_filename"] or download_filename
 
     cloud_url = row["cloud_url"]
     if cloud_url:
         if "/upload/" in cloud_url:
-            direct_dl_url = cloud_url.replace("/upload/", "/upload/fl_attachment/")
+            direct_dl_url = cloud_url.replace("/upload/", f"/upload/fl_attachment:{safe_num}/")
             return redirect(direct_dl_url)
         return redirect(cloud_url)
 
-    local_path = GENERATED / filename
+    local_path = GENERATED / storage_filename
     if local_path.exists():
         return send_from_directory(
-            GENERATED, filename, as_attachment=True, download_name=filename
+            GENERATED, storage_filename, as_attachment=True, download_name=download_filename
         )
+
+    return "Файл табылган жок", 404
 
     return "Файл табылган жок", 404
 
