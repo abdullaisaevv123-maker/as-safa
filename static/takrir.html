@@ -1959,6 +1959,7 @@ function chooseMediaType(type){
     if(!window.takrirActiveCurator){
         showToast('Адегенде кураторду тандаңыз.');
         const manager=document.getElementById('curatorManager');if(manager)manager.style.display='block';
+        const backdrop=document.getElementById('curatorBackdrop');if(backdrop)backdrop.style.display='block';
         return;
     }
     const curatorFolderKey='takrir_folder_'+(currentUser?.sub||currentUser?.email||'guest')+'_curator_'+encodeURIComponent(window.takrirActiveCurator||'');
@@ -2267,7 +2268,7 @@ function useCameraCapture(){
 async function findDriveFileByNumber(number){
     let token=await ensureDriveToken(false);
     const q="trashed=false and appProperties has { key='takrir' and value='1' }";
-    const url="https://www.googleapis.com/drive/v3/files?q="+encodeURIComponent(q)+"&spaces=drive&pageSize=100&fields=files(id,name,mimeType,size,webViewLink,webContentLink,createdTime,appProperties,parents)";
+    const url="https://www.googleapis.com/drive/v3/files?q="+encodeURIComponent(q)+"&spaces=drive&pageSize=1000&fields=files(id,name,mimeType,size,webViewLink,webContentLink,createdTime,appProperties,parents)";
     let r=await driveFetchWithTimeout(url,{headers:{Authorization:"Bearer "+token}},30000);
     if(r.status===401 || r.status===403){
         token=await ensureDriveToken(true);
@@ -2275,7 +2276,47 @@ async function findDriveFileByNumber(number){
     }
     if(!r.ok) throw new Error("Google Drive файлдарды текшерүүдө ката: "+await r.text());
     const data=await r.json();
-    return (data.files||[]).find(f=>String(f.appProperties?.fileNumber||"")===String(number))||null;
+    const activeCurator = String(window.takrirActiveCurator || "");
+    const activeYear = String(typeof takrirYear !== "undefined" ? takrirYear : "");
+    return (data.files||[]).find(f=>{
+        const fNum = String(f.appProperties?.fileNumber || "").trim();
+        if(fNum !== String(number).trim()) return false;
+        const fCurator = String(f.appProperties?.curator || "");
+        if(activeCurator && fCurator && fCurator !== activeCurator) return false;
+        const fYear = f.createdTime ? String(new Date(f.createdTime).getFullYear()) : activeYear;
+        if(activeYear && fYear !== activeYear) return false;
+        return true;
+    }) || null;
+}
+
+async function unmarkDriveFileTakrir(driveId){
+    if(!driveId || String(driveId).startsWith("upload-") || String(driveId).startsWith("manual-")) return;
+    try{
+        let token = await ensureDriveToken(false);
+        let r = await driveFetchWithTimeout(
+            "https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(driveId),
+            {
+                method:"PATCH",
+                headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},
+                body:JSON.stringify({appProperties:{takrir:"0"}})
+            },
+            15000
+        );
+        if(r.status===401 || r.status===403){
+            token = await ensureDriveToken(true);
+            await driveFetchWithTimeout(
+                "https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(driveId),
+                {
+                    method:"PATCH",
+                    headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},
+                    body:JSON.stringify({appProperties:{takrir:"0"}})
+                },
+                15000
+            );
+        }
+    }catch(e){
+        console.warn("Drive белгисин жаңыртуу мүмкүн болгон жок:", e);
+    }
 }
 
 async function uploadVideoToDrive(file,number,onProgress,personNameOverride){
@@ -2432,12 +2473,18 @@ function renderSelectionBar(){
       ${readSelected?'<button onclick="markSelectedUnread()">● Окулбаганга</button>':''}
       <button onclick="clearSelectedFiles()">✕</button>`;
 }
-function deleteSelectedFiles(){
+async function deleteSelectedFiles(){
     if(!selectedFileIds.size)return;
     if(!confirm("Тандалган файл номерлерин сайттагы тизмеден өчүрөсүзбү? Google Drive'дагы видеолор сакталат."))return;
-    saveFiles(getFiles().filter(f=>!selectedFileIds.has(String(f.id))));
+    const all = getFiles();
+    const toDelete = all.filter(f=>selectedFileIds.has(String(f.id)));
+    saveFiles(all.filter(f=>!selectedFileIds.has(String(f.id))));
     const n=selectedFileIds.size; selectedFileIds.clear(); selectionMode=false; document.getElementById("selectionBar")?.remove();
-    renderChatList(); showToast("✅ "+n+" файл өчүрүлдү. Google Drive'дагы видеолор сакталды.");
+    renderChatList();
+    showToast("✅ "+n+" файл өчүрүлдү. Google Drive'дагы видеолор сакталды.");
+    for(const f of toDelete){
+        await unmarkDriveFileTakrir(f.driveId || f.id);
+    }
 }
 function markSelectedRead(){
     const ids=new Set([...selectedFileIds].map(String));
@@ -2629,11 +2676,16 @@ function closeMobileChat(){
     }
 }
 
-function deleteFile(id){
+async function deleteFile(id){
     if(!confirm("Бул файл номерин сайттагы тизмеден өчүрөсүзбү? Google Drive'дагы видео сакталат."))return;
-    saveFiles(getFiles().filter(f=>String(f.id)!==String(id)));
+    const all = getFiles();
+    const target = all.find(f=>String(f.id)===String(id));
+    saveFiles(all.filter(f=>String(f.id)!==String(id)));
     if(String(currentFileId)===String(id))showWelcome(); else renderChatList();
     showToast("✅ Файл сайттан өчүрүлдү. Google Drive'дагы видео сакталды.");
+    if(target){
+        await unmarkDriveFileTakrir(target.driveId || target.id);
+    }
 }
 
 async function copyText(text){
@@ -2879,7 +2931,7 @@ function closeBulkImport(){const m=document.getElementById('bulkImportModal');if
 function importBulkNumbers(){
   const input=document.getElementById('bulkImportInput');
   const text=(input?.value||'').trim(); if(!text){showToast('⚠️ Файл номерлерин киргизиңиз.');return;}
-  const nums=text.split(/[\\s,;]+/).map(x=>x.trim()).filter(Boolean);
+  const nums=text.split(/[\s,;]+/).map(x=>x.trim()).filter(Boolean);
   const existing=getFiles();
   const now=new Date().toLocaleString('ky-KG');
   const imported=nums.map((number,i)=>({id:'manual-'+takrirYear+'-'+Date.now()+'-'+i+'-'+Math.random().toString(36).slice(2),number,name:'Катталуучу файл',date:now,createdTime:new Date().toISOString(),year:takrirYear,type:'pending',unread:true,manual:true,driveId:null,url:'',uploadProgress:0}));
@@ -3505,9 +3557,10 @@ body::before{
       e.preventDefault();typeof openNumberModal==='function'&&openNumberModal();
     }
     if(e.key==='Escape'){
-      ['numberModal','videoModal','settingsModal','folderPickerModal','moreMenu','yearMenu','analyticsModal'].forEach(id=>{
+      ['numberModal','videoModal','settingsModal','folderPickerModal','moreMenu','yearMenu','analyticsModal','curatorManager'].forEach(id=>{
         const el=$(id);if(el&&el.style.display&&el.style.display!=='none')el.style.display='none';
       });
+      const bd=$('curatorBackdrop');if(bd)bd.style.display='none';
     }
   });
 
@@ -3657,7 +3710,7 @@ document.addEventListener("click",function(e){
 </script>
 <style>
 /* WhatsApp Web-like clean 100% scale */
-html,body{zoom:1!important;transform:none!important}body{background:#d1d7db!important;color:#111b21!important}#appShell{width:100%!important;max-width:none!important;height:100vh!important} .sidebar{background:#fff!important}.sidebar-header,.main-header{background:#f0f2f5!important;border-bottom:1px solid #d1d7db!important}.search-area{background:#fff!important;padding:8px 12px!important}.search-box{background:#f0f2f5!important;border-radius:8px!important}.chat-list{background:#fff!important}.chat-item{border-bottom:1px solid #e9edef!important;background:#fff!important;border-radius:0!important}.chat-item:hover{background:#f5f6f6!important}.chat-item.unread{background:#f7fffb!important}.main{background:#efeae2!important}.message-area{background:#efeae2!important}.file-filters{background:#fff!important;padding:8px 10px!important;gap:8px!important;overflow:visible!important}.filter-btn,.filter-more-btn{border:0!important;background:#f0f2f5!important;color:#54656f!important;border-radius:20px!important;padding:9px 14px!important;font-weight:700!important}.filter-btn.active{background:#00a884!important;color:#fff!important}.filter-btn small{background:#d9fdd3!important;color:#087e4b!important}.filter-btn.active small{background:#fff!important;color:#00a884!important}.filter-more-btn{width:42px!important;padding:0!important;font-size:20px!important}.extra-filter{display:none!important}.extra-filters-open .extra-filter{display:inline-flex!important}.mx-dashboard,#mxDashboard{display:none!important}.main-header-actions{display:flex;align-items:center;gap:2px}.header-icon-btn{width:40px;height:40px;border:0;background:transparent;border-radius:50%;font-size:19px;cursor:pointer;color:#54656f;display:inline-flex;align-items:center;justify-content:center}.header-icon-btn:hover,.circle-btn:hover{background:#e9edef}.chat-more-btn{font-size:22px!important;color:#667781!important}.account-action-box{margin-top:8px}.settings-account-btn{border:0;border-radius:8px;padding:9px 15px;background:#00a884;color:#fff;font-weight:700;cursor:pointer}.logout-btn{background:#d9534f}.analytics-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}.analytics-grid div{background:#f0f2f5;border-radius:10px;padding:16px;text-align:center}.analytics-grid b{display:block;font-size:28px;color:#00a884}.analytics-grid span{display:block;margin-top:5px;color:#54656f}.analytics-summary{background:#f7f8f8;border-radius:10px;padding:14px;line-height:1.7;word-break:break-word}.more-menu{background:#fff!important;border:1px solid #d1d7db!important;box-shadow:0 4px 16px rgba(0,0,0,.15)!important}.more-menu button{background:#fff!important;color:#111b21!important}.more-menu button:hover{background:#f0f2f5!important}.file-open .main-header{background:#f0f2f5!important}@media(max-width:700px){.analytics-grid{grid-template-columns:repeat(2,1fr)}.header-icon-btn{width:36px;height:36px}.filter-btn{padding:8px 11px!important}}
+html,body{zoom:1!important;transform:none!important}body{background:#d1d7db!important;color:#111b21!important}#appShell{width:100%!important;max-width:none!important;height:100vh!important} .sidebar{background:#fff!important}.sidebar-header,.main-header{background:#f0f2f5!important;border-bottom:1px solid #d1d7db!important}.search-area{background:#fff!important;padding:8px 12px!important}.search-box{background:#f0f2f5!important;border-radius:8px!important}.chat-list{background:#fff!important}.chat-item{border-bottom:1px solid #e9edef!important;background:#fff!important;border-radius:0!important}.chat-item:hover{background:#f5f6f6!important}.chat-item.unread{background:#f7fffb!important}.main{background:#efeae2!important}.message-area{background:#efeae2!important}.file-filters{background:#fff!important;padding:8px 10px!important;gap:8px!important;overflow:visible!important}.filter-btn,.filter-more-btn{border:0!important;background:#f0f2f5!important;color:#54656f!important;border-radius:20px!important;padding:9px 14px!important;font-weight:700!important}.filter-btn.active{background:#00a884!important;color:#fff!important}.filter-btn small{background:#d9fdd3!important;color:#087e4b!important}.filter-btn.active small{background:#fff!important;color:#00a884!important}.filter-more-btn{width:42px!important;padding:0!important;font-size:20px!important}.extra-filter{display:none!important}.extra-filters-open .extra-filter{display:inline-flex!important}.mx-dashboard,#mxDashboard{display:none!important}.main-header-actions{display:flex;align-items:center;gap:2px}.header-icon-btn{width:40px;height:40px;border:0;background:transparent;border-radius:50%;font-size:19px;cursor:pointer;color:#54656f;display:inline-flex;align-items:center;justify-content:center}.header-icon-btn:hover,.circle-btn:hover{background:#e9edef}.chat-more-btn{font-size:22px!important;color:#667781!important}.account-action-box{margin-top:8px}.settings-account-btn{border:0;border-radius:8px;padding:9px 15px;background:#00a884;color:#fff;font-weight:700;cursor:pointer}.logout-btn{background:#d9534f}.analytics-grid{display:grid;grid-template-columns:repeat(3,1fr)!important;gap:10px;margin:12px 0}.analytics-grid div{background:#f0f2f5;border-radius:10px;padding:16px;text-align:center}.analytics-grid b{display:block;font-size:28px;color:#00a884}.analytics-grid span{display:block;margin-top:5px;color:#54656f}.analytics-summary{background:#f7f8f8;border-radius:10px;padding:14px;line-height:1.7;word-break:break-word}.more-menu{background:#fff!important;border:1px solid #d1d7db!important;box-shadow:0 4px 16px rgba(0,0,0,.15)!important}.more-menu button{background:#fff!important;color:#111b21!important}.more-menu button:hover{background:#f0f2f5!important}.file-open .main-header{background:#f0f2f5!important}@media(max-width:700px){.analytics-grid{grid-template-columns:repeat(2,1fr)}.header-icon-btn{width:36px;height:36px}.filter-btn{padding:8px 11px!important}}
 </style>
 
 <script>
@@ -4026,15 +4079,23 @@ body{background:#d1d7db!important;color:#111b21!important;font-family:Arial,Helv
 #curatorControls{display:flex;align-items:center;gap:4px;max-width:180px}
 #curatorSelect{max-width:112px;border:1px solid #d5dadd;border-radius:7px;background:#fff;padding:5px 6px;font-size:12px;color:#263238}
 #addCuratorBtn{width:27px;height:27px;border:0;border-radius:50%;background:#00a884;color:#fff;font-size:19px;line-height:1}
-#curatorManager{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:25000;background:#fff;border:1px solid #d9e1e5;border-radius:16px;padding:18px;width:min(360px,92vw);max-height:80vh;overflow:auto;box-shadow:0 18px 70px #0005}
-#curatorManager:before{content:"";position:fixed;inset:-100vh -100vw;z-index:-1;background:rgba(0,0,0,.38);pointer-events:none}
-#curatorManager #curatorRows{max-height:38vh;overflow:auto}
-#curatorManager input{margin-top:12px}
-#curatorManager input{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px}
-#curatorManager .curator-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 2px;border-bottom:1px solid #eee}
-#curatorManager .curator-row button{border:0;border-radius:7px;padding:5px 8px;background:#f0f2f5}
-#curatorManager .curator-add-action{width:100%;margin-top:9px;border:0;border-radius:8px;padding:10px;background:#00a884;color:white;font-weight:bold}
-#curatorDriveHint{font-size:12px;color:#667781;margin-top:6px}
+#curatorBackdrop{display:none;position:fixed;inset:0;z-index:99998;background:rgba(17,27,33,.52);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+#curatorManager{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;background:rgba(255,255,255,.97);border:1px solid rgba(0,168,132,.25);border-radius:18px;padding:20px;width:min(380px,92vw);max-height:82vh;overflow:auto;box-shadow:0 22px 60px rgba(0,0,0,.35)}
+.curator-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.curator-modal-head b{font-size:17px}
+.curator-close-x{width:32px;height:32px;border:0;border-radius:50%;background:#f0f2f5;color:#54656f;font-size:17px;display:flex;align-items:center;justify-content:center}
+.curator-close-x:hover{background:#e2e6e8}
+#curatorManager #curatorRows{max-height:38vh;overflow:auto;margin-top:4px}
+#curatorManager input{width:100%;padding:11px 12px;border:1px solid #d1d5db;border-radius:10px;margin-top:12px;font-size:14px}
+#curatorManager .curator-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 4px;border-bottom:1px solid #eee}
+#curatorManager .curator-row-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+#curatorManager .curator-row-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
+#curatorManager .curator-pick-btn{border:0;border-radius:8px;padding:6px 11px;background:#e7f7f2;color:#008f72;font-weight:700;font-size:13px}
+#curatorManager .curator-pick-btn:hover{background:#d0f2e7}
+#curatorManager .curator-del-btn{border:0;border-radius:8px;padding:6px 9px;background:#fee2e2;color:#b91c1c;font-size:13px}
+#curatorManager .curator-del-btn:hover{background:#fecaca}
+#curatorManager .curator-add-action{width:100%;margin-top:10px;border:0;border-radius:10px;padding:11px;background:#00a884;color:white;font-weight:bold;font-size:14px}
+#curatorDriveHint{font-size:12px;color:#667781;margin-top:8px;line-height:1.4}
 #sidebarPlusDock{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:8px 12px;background:#f0f2f5;border-top:1px solid #ddd;min-height:70px}
 #sidebarPlusDock .plus-hint{font-size:12px;color:#667781;margin-right:auto}
 #sidebarPlusDock #floatingActions{position:static!important;right:auto!important;bottom:auto!important;display:block!important}
@@ -4047,7 +4108,9 @@ body{background:#d1d7db!important;color:#111b21!important;font-family:Arial,Helv
  #sidebarPlusDock #floatingPlus{width:48px;height:48px}
  #plusMediaChooser{left:auto;right:18px;bottom:82px}
 }
-body.dark-mode #curatorSelect,body.dark-mode #curatorManager{background:#202c33;color:#e9edef;border-color:#43535c}
+body.dark-mode #curatorSelect,body.dark-mode #curatorManager{background:rgba(32,44,51,.97);color:#e9edef;border-color:#43535c}
+body.dark-mode .curator-close-x{background:#2a3942;color:#e9edef}
+body.dark-mode #curatorManager .curator-row{border-color:#2f3e46}
 body.dark-mode #sidebarPlusDock{background:#202c33;border-color:#33434d}
 </style>
 <script id="curator-system">
@@ -4064,6 +4127,33 @@ body.dark-mode #sidebarPlusDock{background:#202c33;border-color:#33434d}
   function saveCurators(a){localStorage.setItem(curatorListKey(),JSON.stringify(a.slice(0,MAX_CURATORS)));}
   window.takrirActiveCurator=localStorage.getItem(activeCuratorKey())||'';
   window.takrirGetCurators=loadCurators;
+  window.takrirCloseCuratorManager=function(){
+    const box=$('curatorManager');if(box)box.style.display='none';
+    const bd=$('curatorBackdrop');if(bd)bd.style.display='none';
+  };
+  window.takrirOpenCuratorManager=function(){
+    ensureCuratorUI();
+    const box=$('curatorManager');if(!box)return;
+    const bd=$('curatorBackdrop');if(bd)bd.style.display='block';
+    box.style.display='block';
+    renderCuratorRows();
+    setTimeout(()=>$('newCuratorName')?.focus(),30);
+  };
+  window.takrirDeleteCurator=function(name){
+    const target=String(name||'').trim();
+    if(!target)return;
+    if(!confirm('«'+target+'» кураторун тизмеден өчүрөсүзбү? (Бул куратордун файлдары өчпөйт)'))return;
+    const names=loadCurators().filter(n=>n!==target);
+    saveCurators(names);
+    if(window.takrirActiveCurator===target){
+      window.takrirActiveCurator='';
+      localStorage.setItem(activeCuratorKey(),'');
+    }
+    renderCuratorSelect();
+    if(typeof renderChatList==='function')renderChatList();
+    if(typeof updateDriveFolderBox==='function')updateDriveFolderBox();
+    showToast('🗑 «'+target+'» өчүрүлдү');
+  };
   window.takrirSetActiveCurator=function(name){
     window.takrirActiveCurator=String(name||'');
     localStorage.setItem(activeCuratorKey(),window.takrirActiveCurator);
@@ -4078,7 +4168,7 @@ body.dark-mode #sidebarPlusDock{background:#202c33;border-color:#33434d}
     renderCuratorSelect();
     if(typeof renderChatList==='function')renderChatList();
     if(typeof updateDriveFolderBox==='function')updateDriveFolderBox();
-    const box=$('curatorManager');if(box)box.style.display='none';
+    window.takrirCloseCuratorManager();
     showToast(window.takrirActiveCurator?'👤 '+window.takrirActiveCurator+' тандалды':'Бардык кураторлор көрсөтүлөт');
   };
   function ensureCuratorUI(){
@@ -4090,11 +4180,15 @@ body.dark-mode #sidebarPlusDock{background:#202c33;border-color:#33434d}
       $('curatorSelect').addEventListener('change',e=>window.takrirSetActiveCurator(e.target.value));
       $('addCuratorBtn').addEventListener('click',toggleCuratorManager);
     }
+    if(!$('curatorBackdrop')){
+      const bd=document.createElement('div');bd.id='curatorBackdrop';
+      bd.addEventListener('click',window.takrirCloseCuratorManager);
+      document.body.appendChild(bd);
+    }
     if(!$('curatorManager')){
       const box=document.createElement('div');box.id='curatorManager';
-      box.innerHTML='<b>👤 Кураторлор</b><div id="curatorRows"></div><input id="newCuratorName" type="text" maxlength="50" placeholder="Куратордун аты (мисалы: Абдулла)"><button class="curator-add-action" type="button" id="saveNewCurator">＋ Куратор кошуу</button><div id="curatorDriveHint">Ар бир куратор үчүн папканы Настройкадан өзүнчө тандаңыз.</div>';
-      const header=document.querySelector('.sidebar-header');
-      if(header){header.style.position='relative';header.appendChild(box);}
+      box.innerHTML='<div class="curator-modal-head"><b>👤 Кураторлор</b><button type="button" class="curator-close-x" onclick="window.takrirCloseCuratorManager()" title="Жабуу">✕</button></div><div id="curatorRows"></div><input id="newCuratorName" type="text" maxlength="50" placeholder="Куратордун аты (мисалы: Абдулла)"><button class="curator-add-action" type="button" id="saveNewCurator">＋ Куратор кошуу</button><div id="curatorDriveHint">Ар бир куратор үчүн папканы Настройкадан өзүнчө тандаңыз.</div>';
+      document.body.appendChild(box);
       $('saveNewCurator').addEventListener('click',addCurator);
       $('newCuratorName').addEventListener('keydown',e=>{if(e.key==='Enter')addCurator();});
     }
@@ -4109,9 +4203,11 @@ body.dark-mode #sidebarPlusDock{background:#202c33;border-color:#33434d}
   }
   function toggleCuratorManager(){
     const box=$('curatorManager');if(!box)return;
-    box.style.display=box.style.display==='block'?'none':'block';
-    renderCuratorRows();
-    if(box.style.display==='block')setTimeout(()=>$('newCuratorName')?.focus(),30);
+    if(box.style.display==='block'){
+      window.takrirCloseCuratorManager();
+    }else{
+      window.takrirOpenCuratorManager();
+    }
   }
   function renderCuratorSelect(){
     const select=$('curatorSelect');if(!select)return;
@@ -4124,10 +4220,11 @@ body.dark-mode #sidebarPlusDock{background:#202c33;border-color:#33434d}
   function renderCuratorRows(){
     const rows=$('curatorRows');if(!rows)return;
     const names=loadCurators();
-    rows.innerHTML=names.length?names.map(n=>`<div class="curator-row"><span>${escapeHTML(n)}</span><button type="button" onclick="window.takrirSetActiveCurator('${escapeAttr(n)}');document.getElementById('curatorManager').style.display='none'">Тандоо</button></div>`).join(''):'<div class="settings-muted">Кураторлор азырынча кошула элек.</div>';
+    rows.innerHTML=names.length?names.map(n=>`<div class="curator-row"><span class="curator-row-name">${escapeHTML(n)}</span><div class="curator-row-actions"><button type="button" class="curator-pick-btn" onclick="window.takrirSetActiveCurator('${escapeAttr(n)}')">Тандоо</button><button type="button" class="curator-del-btn" onclick="window.takrirDeleteCurator('${escapeAttr(n)}')" title="Өчүрүү">🗑 Өчүрүү</button></div></div>`).join(''):'<div class="settings-muted" style="padding:10px 2px">Кураторлор азырынча кошула элек.</div>';
     const btn=$('saveNewCurator');if(btn)btn.disabled=names.length>=MAX_CURATORS;
     const input=$('newCuratorName');if(input)input.disabled=names.length>=MAX_CURATORS;
     if(btn && names.length>=MAX_CURATORS)btn.textContent='10 куратор кошулган';
+    else if(btn)btn.textContent='＋ Куратор кошуу';
   }
   function addCurator(){
     const input=$('newCuratorName');const name=(input?.value||'').trim();
