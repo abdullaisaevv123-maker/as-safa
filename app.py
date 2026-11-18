@@ -1,8 +1,8 @@
+import gc
 import io
 import os
 import uuid
 import sqlite3
-import urllib.request
 from pathlib import Path
 from datetime import datetime
 
@@ -13,7 +13,7 @@ import fitz
 import numpy as np
 import qrcode
 from PIL import Image, ImageOps
-from flask import Flask, Response, jsonify, render_template, request, send_from_directory, url_for
+from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, url_for
 
 # ============================================================
 # CLOUDINARY ЖӨНДӨӨЛӨРҮ
@@ -142,14 +142,22 @@ FACE_CASCADE = cv2.CascadeClassifier(cascade_path)
 def prepare_photo10(data):
     try:
         original = Image.open(io.BytesIO(data)).convert("RGB")
-        cv_image = cv2.cvtColor(np.array(original), cv2.COLOR_RGB2BGR)
+        # Сүрөт өтө чоң болсо, бетти издөө үчүн кичирейтип алабыз (RAM үнөмдөө)
+        detect_img = original.copy()
+        detect_img.thumbnail((800, 800))
+        scale_x = original.width / detect_img.width
+        scale_y = original.height / detect_img.height
+
+        cv_image = cv2.cvtColor(np.array(detect_img), cv2.COLOR_RGB2BGR)
         gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
 
         faces = ()
         if not FACE_CASCADE.empty():
             faces = FACE_CASCADE.detectMultiScale(
-                gray, scaleFactor=1.08, minNeighbors=5, minSize=(60, 60)
+                gray, scaleFactor=1.08, minNeighbors=5, minSize=(40, 40)
             )
+
+        del cv_image, gray, detect_img
 
         W, H = original.size
         target_ratio = 4 / 6
@@ -157,6 +165,7 @@ def prepare_photo10(data):
         if len(faces) > 0:
             faces_sorted = sorted(faces, key=lambda item: item[2] * item[3], reverse=True)
             x, y, fw, fh = faces_sorted[0]
+            x, y, fw, fh = x * scale_x, y * scale_y, fw * scale_x, fh * scale_y
             face_cx = x + fw / 2
             face_cy = y + fh / 2
 
@@ -192,11 +201,17 @@ def prepare_photo10(data):
                 crop = original.crop((0, top, W, top + new_h))
 
         final = ImageOps.fit(
-            crop, (800, 1200), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5)
+            crop, (600, 900), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5)
         )
         out = io.BytesIO()
-        final.save(out, "JPEG", quality=95, optimize=True)
-        return out.getvalue()
+        final.save(out, "JPEG", quality=88, optimize=True)
+        res_bytes = out.getvalue()
+
+        original.close()
+        crop.close()
+        final.close()
+        out.close()
+        return res_bytes
     except Exception:
         return data
 
@@ -219,16 +234,22 @@ def put_image(page, field, data, photo10=False):
             data = prepare_photo10(data)
 
         im = Image.open(io.BytesIO(data)).convert("RGB")
+        # Керексиз өтө чоң пикселдерди азайтуу (RAM жана PDF көлөмүн үнөмдөө)
+        target_w = min(1000, max(300, int(rect.width * 4)))
+        target_h = min(1400, max(300, int(rect.height * 4)))
         im = ImageOps.fit(
             im,
-            (max(300, int(rect.width * 6)), max(300, int(rect.height * 6))),
+            (target_w, target_h),
             method=Image.Resampling.LANCZOS,
             centering=(0.5, 0.5),
         )
         b = io.BytesIO()
-        im.save(b, "JPEG", quality=95)
+        im.save(b, "JPEG", quality=88, optimize=True)
         page.draw_rect(rect, color=(1, 1, 1), fill=(1, 1, 1), width=0, overlay=True)
         page.insert_image(rect, stream=b.getvalue(), keep_proportion=False, overlay=True)
+
+        im.close()
+        b.close()
         return True
     except Exception:
         return False
@@ -241,15 +262,18 @@ def generate_qr_bytes(text):
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_M,
-        box_size=10,
+        box_size=8,
         border=2,
     )
     qr.add_data(text)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
     b = io.BytesIO()
-    img.save(b, "JPEG", quality=95)
-    return b.getvalue()
+    img.save(b, "JPEG", quality=90)
+    res = b.getvalue()
+    img.close()
+    b.close()
+    return res
 
 
 def put_qr_code(page, field, link_text):
@@ -270,14 +294,17 @@ def put_qr_code(page, field, link_text):
         im = Image.open(io.BytesIO(qr_bytes)).convert("RGB")
         im = ImageOps.fit(
             im,
-            (max(300, int(rect.width * 6)), max(300, int(rect.height * 6))),
+            (max(250, int(rect.width * 4)), max(250, int(rect.height * 4))),
             method=Image.Resampling.LANCZOS,
             centering=(0.5, 0.5),
         )
         b = io.BytesIO()
-        im.save(b, "JPEG", quality=95)
+        im.save(b, "JPEG", quality=90)
         page.draw_rect(rect, color=(1, 1, 1), fill=(1, 1, 1), width=0, overlay=True)
         page.insert_image(rect, stream=b.getvalue(), keep_proportion=False, overlay=True)
+
+        im.close()
+        b.close()
         return True
     except Exception:
         return False
@@ -306,34 +333,40 @@ def build(form, files, category="armala"):
     doc = fitz.open(str(template_path))
     form_dict = dict(form)
 
-    for k, (p, f) in IMAGES.items():
-        if k == "qr_code":
-            continue
-        if k in files and p < len(doc):
-            put_image(doc[p], f, files[k], photo10=(k == "photo10"))
+    try:
+        for k, (p, f) in IMAGES.items():
+            if k == "qr_code":
+                continue
+            if k in files and p < len(doc):
+                put_image(doc[p], f, files[k], photo10=(k == "photo10"))
+                # Иштетилген сүрөттү RAM'дан дароо өчүрүү
+                del files[k]
+                gc.collect()
 
-    link = (form_dict.get("link") or "").strip()
-    if link and 2 < len(doc):
-        put_qr_code(doc[2], IMAGES["qr_code"][1], link)
-        put_editable_link(doc[2], "Text8", link)
+        link = (form_dict.get("link") or "").strip()
+        if link and 2 < len(doc):
+            put_qr_code(doc[2], IMAGES["qr_code"][1], link)
+            put_editable_link(doc[2], "Text8", link)
 
-    file_number = (form_dict.get("file_number") or "NO_NUMBER").strip()
-    safe_file_number = "".join(
-        c for c in file_number if c.isalnum() or c in ("-", "_")
-    )
-    if not safe_file_number:
-        safe_file_number = "NO_NUMBER"
+        file_number = (form_dict.get("file_number") or "NO_NUMBER").strip()
+        safe_file_number = "".join(
+            c for c in file_number if c.isalnum() or c in ("-", "_")
+        )
+        if not safe_file_number:
+            safe_file_number = "NO_NUMBER"
 
-    prefix = "SIROTY" if category == "siroty" else "ARMALA"
-    filename = (
-        f"PDF_{prefix}_{safe_file_number}_"
-        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_"
-        f"{uuid.uuid4().hex[:5]}.pdf"
-    )
-    out = GENERATED / filename
-    doc.save(str(out), deflate=True)
-    doc.close()
-    return out
+        prefix = "SIROTY" if category == "siroty" else "ARMALA"
+        filename = (
+            f"PDF_{prefix}_{safe_file_number}_"
+            f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_"
+            f"{uuid.uuid4().hex[:5]}.pdf"
+        )
+        out = GENERATED / filename
+        doc.save(str(out), deflate=True, garbage=3)
+        return out
+    finally:
+        doc.close()
+        gc.collect()
 
 
 # ============================================================
@@ -469,7 +502,7 @@ def list_pdfs():
 
 @app.get("/api/pdfs/<int:item_id>/file")
 def force_download_pdf(item_id):
-    """Cloudinary'ге киргизбестен дароо файл катары жүктөйт (Save As терезесин ачат)"""
+    """Сервердин RAM'ын колдонбой, түз Cloudinary'ден көчүрүп берүү"""
     conn = get_db()
     row = conn.execute(
         "SELECT pdf_filename, cloud_url FROM beneficiaries WHERE id = ?", (item_id,)
@@ -486,30 +519,20 @@ def force_download_pdf(item_id):
     if not filename.lower().endswith(".pdf"):
         filename += ".pdf"
 
-    # Эгер локалдык папкада бар болсо
+    # 1. Cloudinary бар болсо, серверди кыйнабай түз ошол жактан көчүртүү
+    cloud_url = row["cloud_url"]
+    if cloud_url:
+        if "/upload/" in cloud_url:
+            direct_dl_url = cloud_url.replace("/upload/", "/upload/fl_attachment/")
+            return redirect(direct_dl_url)
+        return redirect(cloud_url)
+
+    # 2. Эгер Cloudinary жок болсо, локалдык папкадан берүү
     local_path = GENERATED / filename
     if local_path.exists():
         return send_from_directory(
             GENERATED, filename, as_attachment=True, download_name=filename
         )
-
-    # Cloudinary'ден алып түз attachment катары берүү
-    cloud_url = row["cloud_url"]
-    if cloud_url:
-        try:
-            req = urllib.request.Request(cloud_url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=25) as resp:
-                pdf_bytes = resp.read()
-            return Response(
-                pdf_bytes,
-                mimetype="application/pdf",
-                headers={
-                    "Content-Disposition": f'attachment; filename="{filename}"',
-                    "Content-Length": str(len(pdf_bytes)),
-                },
-            )
-        except Exception as e:
-            return f"Жүктөөдө ката кетти: {e}", 502
 
     return "Файл табылган жок", 404
 
@@ -592,13 +615,9 @@ def bulk_delete_pdfs():
 
 @app.post("/api/generate")
 def generate():
+    out = None
+    files = {}
     try:
-        files = {}
-        for k in ("photo10", "photo1", "photo2", "photo3"):
-            f = request.files.get(k)
-            if f and f.filename:
-                files[k] = f.read()
-
         form_dict = dict(request.form)
         category = (form_dict.get("category") or "armala").strip().lower()
         if category not in ("armala", "siroty"):
@@ -621,16 +640,25 @@ def generate():
                 error=f"Файл № {file_number} базада бар! Кайра жасоо үчүн алгач тизмеден өчүрүңүз (Удалить)."
             ), 400
 
+        for k in ("photo10", "photo1", "photo2", "photo3"):
+            f = request.files.get(k)
+            if f and f.filename:
+                files[k] = f.read()
+
         out = build(form_dict, files, category=category)
         cloud_url = upload_pdf_to_cloudinary(out, category=category)
+
+        # Cloudinary'ге жүктөлгөн соң сервердеги убактылуу PDFти дароо өчүрүү
+        if cloud_url and out.exists():
+            out.unlink(missing_ok=True)
 
         try:
             save_beneficiary(form_dict, out.name, cloud_url=cloud_url, category=category)
         except Exception as e:
-            out.unlink(missing_ok=True)
+            if out and out.exists():
+                out.unlink(missing_ok=True)
             return jsonify(ok=False, error=str(e)), 400
 
-        # Жаңы жасалган файлдын id'син алуу (түз жүктөө шилтемеси үчүн)
         conn = get_db()
         row = conn.execute(
             "SELECT id FROM beneficiaries WHERE file_number = ? AND category = ?",
@@ -638,9 +666,6 @@ def generate():
         ).fetchone()
         conn.close()
         new_id = row["id"] if row else None
-
-        if cloud_url:
-            out.unlink(missing_ok=True)
 
         download_link = (
             url_for("force_download_pdf", item_id=new_id)
@@ -654,7 +679,12 @@ def generate():
             category=category,
         )
     except Exception as e:
+        if out and out.exists():
+            out.unlink(missing_ok=True)
         return jsonify(ok=False, error=str(e)), 500
+    finally:
+        files.clear()
+        gc.collect()
 
 
 @app.get("/download/<path:filename>")
