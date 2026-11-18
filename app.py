@@ -5,9 +5,9 @@ import uuid
 import sqlite3
 from pathlib import Path
 from datetime import datetime
-
 import cloudinary
 import cloudinary.uploader
+import cloudinary.api
 import cv2
 import fitz
 import numpy as np
@@ -61,8 +61,9 @@ DATABASE = BASE / "beneficiaries.db"
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
 
+
 # ============================================================
-# SQLITE
+# SQLITE + CLOUDINARY СИНХРОНДОШТУРУУ
 # ============================================================
 def get_db():
     conn = sqlite3.connect(str(DATABASE), timeout=10.0)
@@ -70,11 +71,61 @@ def get_db():
     return conn
 
 
+def sync_from_cloudinary(conn):
+    """Render деплой болгондо Cloudinary'деги PDF тизмесин базага кайра калыбына келтирет"""
+    if not os.environ.get("CLOUDINARY_CLOUD_NAME"):
+        return
+    for cat in ("armala", "siroty"):
+        prefix = f"as_safa_pdfs/{cat}/"
+        next_cursor = None
+        while True:
+            try:
+                params = {
+                    "type": "upload",
+                    "resource_type": "raw",
+                    "prefix": prefix,
+                    "max_results": 500,
+                }
+                if next_cursor:
+                    params["next_cursor"] = next_cursor
+                res = cloudinary.api.resources(**params)
+                for item in res.get("resources", []):
+                    public_id = item.get("public_id", "")
+                    secure_url = item.get("secure_url", "")
+                    created_at = item.get("created_at") or datetime.now().isoformat(timespec="seconds")
+                    filename = public_id.split("/")[-1]
+                    if not filename.lower().endswith(".pdf"):
+                        filename += ".pdf"
+
+                    # Файл атынан файл номерин алуу: PDF_ARMALA_00125_20261118_...
+                    parts = filename.split("_")
+                    file_number = parts[2] if len(parts) >= 3 else filename
+
+                    exists = conn.execute(
+                        "SELECT id FROM beneficiaries WHERE file_number = ? AND category = ?",
+                        (file_number, cat),
+                    ).fetchone()
+                    if not exists:
+                        conn.execute(
+                            """
+                            INSERT INTO beneficiaries (
+                                file_number, category, pdf_filename, cloud_url, is_downloaded, created_at
+                            ) VALUES (?, ?, ?, ?, 0, ?)
+                            """,
+                            (file_number, cat, filename, secure_url, created_at),
+                        )
+                next_cursor = res.get("next_cursor")
+                if not next_cursor:
+                    break
+            except Exception as e:
+                print(f"Cloudinary тизмесин окуу катасы ({cat}):", e)
+                break
+
+
 def init_db():
     conn = get_db()
     try:
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS beneficiaries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 file_number TEXT NOT NULL,
@@ -96,8 +147,7 @@ def init_db():
                 is_downloaded INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL
             )
-            """
-        )
+        """)
         for col_sql in [
             "ALTER TABLE beneficiaries ADD COLUMN cloud_url TEXT",
             "ALTER TABLE beneficiaries ADD COLUMN category TEXT DEFAULT 'armala'",
@@ -107,9 +157,9 @@ def init_db():
                 conn.execute(col_sql)
             except sqlite3.OperationalError:
                 pass
-
         conn.execute("UPDATE beneficiaries SET category = 'armala' WHERE category IS NULL OR category = ''")
         conn.execute("UPDATE beneficiaries SET is_downloaded = 0 WHERE is_downloaded IS NULL")
+        sync_from_cloudinary(conn)
         conn.commit()
     finally:
         conn.close()
@@ -118,7 +168,7 @@ def init_db():
 init_db()
 
 # ============================================================
-# PDF FIELD NAMES
+# PDF FIELD NAMES (КОЛ ТИЙГИС НЕГИЗГИ КООРДИНАТТАР)
 # ============================================================
 IMAGES = {
     "photo10": (0, "Image1"),
@@ -142,7 +192,6 @@ FACE_CASCADE = cv2.CascadeClassifier(cascade_path)
 def prepare_photo10(data):
     try:
         original = Image.open(io.BytesIO(data)).convert("RGB")
-        # Сүрөт өтө чоң болсо, бетти издөө үчүн кичирейтип алабыз (RAM үнөмдөө)
         detect_img = original.copy()
         detect_img.thumbnail((800, 800))
         scale_x = original.width / detect_img.width
@@ -150,13 +199,11 @@ def prepare_photo10(data):
 
         cv_image = cv2.cvtColor(np.array(detect_img), cv2.COLOR_RGB2BGR)
         gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-
         faces = ()
         if not FACE_CASCADE.empty():
             faces = FACE_CASCADE.detectMultiScale(
                 gray, scaleFactor=1.08, minNeighbors=5, minSize=(40, 40)
             )
-
         del cv_image, gray, detect_img
 
         W, H = original.size
@@ -166,6 +213,7 @@ def prepare_photo10(data):
             faces_sorted = sorted(faces, key=lambda item: item[2] * item[3], reverse=True)
             x, y, fw, fh = faces_sorted[0]
             x, y, fw, fh = x * scale_x, y * scale_y, fw * scale_x, fh * scale_y
+
             face_cx = x + fw / 2
             face_cy = y + fh / 2
 
@@ -183,6 +231,7 @@ def prepare_photo10(data):
 
             left = face_cx - desired_w / 2
             top = face_cy - fh * 0.95
+
             left = max(0, min(left, W - desired_w))
             top = max(0, min(top, H - desired_h))
 
@@ -227,6 +276,7 @@ def put_image(page, field, data, photo10=False):
                 except Exception:
                     pass
                 break
+
         if rect is None:
             return False
 
@@ -234,9 +284,9 @@ def put_image(page, field, data, photo10=False):
             data = prepare_photo10(data)
 
         im = Image.open(io.BytesIO(data)).convert("RGB")
-        # Керексиз өтө чоң пикселдерди азайтуу (RAM жана PDF көлөмүн үнөмдөө)
         target_w = min(1000, max(300, int(rect.width * 4)))
         target_h = min(1400, max(300, int(rect.height * 4)))
+
         im = ImageOps.fit(
             im,
             (target_w, target_h),
@@ -247,7 +297,6 @@ def put_image(page, field, data, photo10=False):
         im.save(b, "JPEG", quality=88, optimize=True)
         page.draw_rect(rect, color=(1, 1, 1), fill=(1, 1, 1), width=0, overlay=True)
         page.insert_image(rect, stream=b.getvalue(), keep_proportion=False, overlay=True)
-
         im.close()
         b.close()
         return True
@@ -287,6 +336,7 @@ def put_qr_code(page, field, link_text):
                 except Exception:
                     pass
                 break
+
         if rect is None or not link_text:
             return False
 
@@ -302,7 +352,6 @@ def put_qr_code(page, field, link_text):
         im.save(b, "JPEG", quality=90)
         page.draw_rect(rect, color=(1, 1, 1), fill=(1, 1, 1), width=0, overlay=True)
         page.insert_image(rect, stream=b.getvalue(), keep_proportion=False, overlay=True)
-
         im.close()
         b.close()
         return True
@@ -332,14 +381,12 @@ def build(form, files, category="armala"):
 
     doc = fitz.open(str(template_path))
     form_dict = dict(form)
-
     try:
         for k, (p, f) in IMAGES.items():
             if k == "qr_code":
                 continue
             if k in files and p < len(doc):
                 put_image(doc[p], f, files[k], photo10=(k == "photo10"))
-                # Иштетилген сүрөттү RAM'дан дароо өчүрүү
                 del files[k]
                 gc.collect()
 
@@ -383,16 +430,17 @@ def save_beneficiary(form_dict, pdf_filename, cloud_url=None, category="armala")
             "SELECT id FROM beneficiaries WHERE file_number = ? AND category = ?",
             (file_number, category),
         ).fetchone()
-
         if exists:
-            raise ValueError(f"Файл № {file_number} базада мурунтан бар! Кайра жасоо үчүн алгач тизмеден өчүрүңүз.")
+            raise ValueError(
+                f"Файл № {file_number} базада мурунтан бар! Кайра жасоо үчүн алгач тизмеден өчүрүңүз."
+            )
 
         conn.execute(
             """
             INSERT INTO beneficiaries (
-                file_number, category, sponsor, beneficiary, beneficiary_number, internal_number,
-                birth_date, gender, health, class_name, future_wish, impact, notes,
-                link, pdf_filename, cloud_url, is_downloaded, created_at
+                file_number, category, sponsor, beneficiary, beneficiary_number,
+                internal_number, birth_date, gender, health, class_name,
+                future_wish, impact, notes, link, pdf_filename, cloud_url, is_downloaded, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
             """,
             (
@@ -435,7 +483,6 @@ def list_pdfs():
         category = "armala"
 
     query_text = (request.args.get("q") or "").strip()
-
     try:
         offset = max(0, int(request.args.get("offset", 0)))
         limit = min(50, max(1, int(request.args.get("limit", 10))))
@@ -443,14 +490,12 @@ def list_pdfs():
         offset, limit = 0, 10
 
     conn = get_db()
-
     if query_text:
         like_q = f"%{query_text}%"
         total = conn.execute(
             "SELECT COUNT(*) FROM beneficiaries WHERE category = ? AND file_number LIKE ?",
             (category, like_q),
         ).fetchone()[0]
-
         rows = conn.execute(
             """
             SELECT id, file_number, beneficiary, pdf_filename, cloud_url, is_downloaded, created_at, category
@@ -465,7 +510,6 @@ def list_pdfs():
         total = conn.execute(
             "SELECT COUNT(*) FROM beneficiaries WHERE category = ?", (category,)
         ).fetchone()[0]
-
         rows = conn.execute(
             """
             SELECT id, file_number, beneficiary, pdf_filename, cloud_url, is_downloaded, created_at, category
@@ -476,21 +520,22 @@ def list_pdfs():
             """,
             (category, limit, offset),
         ).fetchall()
-
     conn.close()
 
     items = []
     for r in rows:
-        items.append({
-            "id": r["id"],
-            "file_number": r["file_number"],
-            "category": r["category"],
-            "beneficiary": r["beneficiary"] or "",
-            "name": r["pdf_filename"] or f"PDF_{r['file_number']}.pdf",
-            "download_url": url_for("force_download_pdf", item_id=r["id"]),
-            "is_downloaded": bool(r["is_downloaded"]),
-            "created_at": r["created_at"],
-        })
+        items.append(
+            {
+                "id": r["id"],
+                "file_number": r["file_number"],
+                "category": r["category"],
+                "beneficiary": r["beneficiary"] or "",
+                "name": r["pdf_filename"] or f"PDF_{r['file_number']}.pdf",
+                "download_url": url_for("force_download_pdf", item_id=r["id"]),
+                "is_downloaded": bool(r["is_downloaded"]),
+                "created_at": r["created_at"],
+            }
+        )
 
     return jsonify(
         ok=True,
@@ -519,7 +564,6 @@ def force_download_pdf(item_id):
     if not filename.lower().endswith(".pdf"):
         filename += ".pdf"
 
-    # 1. Cloudinary бар болсо, серверди кыйнабай түз ошол жактан көчүртүү
     cloud_url = row["cloud_url"]
     if cloud_url:
         if "/upload/" in cloud_url:
@@ -527,7 +571,6 @@ def force_download_pdf(item_id):
             return redirect(direct_dl_url)
         return redirect(cloud_url)
 
-    # 2. Эгер Cloudinary жок болсо, локалдык папкадан берүү
     local_path = GENERATED / filename
     if local_path.exists():
         return send_from_directory(
@@ -548,10 +591,10 @@ def mark_pdf_downloaded(item_id):
 
 @app.delete("/api/pdfs/<int:item_id>")
 def delete_pdf_from_site(item_id):
-    """Бир PDFти сайттан өчүрөт (Cloudinary'ден ӨЧПӨЙТ)"""
+    """Бир PDFти сайттан жана Cloudinary'ден өчүрөт"""
     conn = get_db()
     row = conn.execute(
-        "SELECT pdf_filename FROM beneficiaries WHERE id = ?", (item_id,)
+        "SELECT pdf_filename, category FROM beneficiaries WHERE id = ?", (item_id,)
     ).fetchone()
     if not row:
         conn.close()
@@ -559,6 +602,13 @@ def delete_pdf_from_site(item_id):
 
     if row["pdf_filename"]:
         (GENERATED / row["pdf_filename"]).unlink(missing_ok=True)
+        try:
+            cat = row["category"] or "armala"
+            cloudinary.uploader.destroy(
+                f"as_safa_pdfs/{cat}/{row['pdf_filename']}", resource_type="raw"
+            )
+        except Exception:
+            pass
 
     conn.execute("DELETE FROM beneficiaries WHERE id = ?", (item_id,))
     conn.commit()
@@ -568,7 +618,7 @@ def delete_pdf_from_site(item_id):
 
 @app.post("/api/pdfs/bulk-delete")
 def bulk_delete_pdfs():
-    """Тандалган бир нече PDFти же бүт категорияны сайттан өчүрөт (Cloudinary'ден ӨЧПӨЙТ)"""
+    """Тандалган бир нече PDFти же бүт категорияны сайттан жана Cloudinary'ден өчүрөт"""
     data = request.get_json(silent=True) or {}
     ids = data.get("ids") or []
     delete_all_category = data.get("delete_all_category")
@@ -583,6 +633,13 @@ def bulk_delete_pdfs():
             for r in rows:
                 if r["pdf_filename"]:
                     (GENERATED / r["pdf_filename"]).unlink(missing_ok=True)
+                    try:
+                        cloudinary.uploader.destroy(
+                            f"as_safa_pdfs/{delete_all_category}/{r['pdf_filename']}",
+                            resource_type="raw",
+                        )
+                    except Exception:
+                        pass
             conn.execute(
                 "DELETE FROM beneficiaries WHERE category = ?",
                 (delete_all_category,),
@@ -596,13 +653,19 @@ def bulk_delete_pdfs():
 
         placeholders = ",".join("?" for _ in clean_ids)
         rows = conn.execute(
-            f"SELECT pdf_filename FROM beneficiaries WHERE id IN ({placeholders})",
+            f"SELECT pdf_filename, category FROM beneficiaries WHERE id IN ({placeholders})",
             clean_ids,
         ).fetchall()
         for r in rows:
             if r["pdf_filename"]:
                 (GENERATED / r["pdf_filename"]).unlink(missing_ok=True)
-
+                try:
+                    cat = r["category"] or "armala"
+                    cloudinary.uploader.destroy(
+                        f"as_safa_pdfs/{cat}/{r['pdf_filename']}", resource_type="raw"
+                    )
+                except Exception:
+                    pass
         conn.execute(
             f"DELETE FROM beneficiaries WHERE id IN ({placeholders})",
             clean_ids,
@@ -633,11 +696,10 @@ def generate():
             (file_number, category),
         ).fetchone()
         conn.close()
-
         if exists:
             return jsonify(
                 ok=False,
-                error=f"Файл № {file_number} базада бар! Кайра жасоо үчүн алгач тизмеден өчүрүңүз (Удалить)."
+                error=f"Файл № {file_number} базада бар! Кайра жасоо үчүн алгач тизмеден өчүрүңүз (Удалить).",
             ), 400
 
         for k in ("photo10", "photo1", "photo2", "photo3"):
@@ -648,12 +710,13 @@ def generate():
         out = build(form_dict, files, category=category)
         cloud_url = upload_pdf_to_cloudinary(out, category=category)
 
-        # Cloudinary'ге жүктөлгөн соң сервердеги убактылуу PDFти дароо өчүрүү
         if cloud_url and out.exists():
             out.unlink(missing_ok=True)
 
         try:
-            save_beneficiary(form_dict, out.name, cloud_url=cloud_url, category=category)
+            save_beneficiary(
+                form_dict, out.name, cloud_url=cloud_url, category=category
+            )
         except Exception as e:
             if out and out.exists():
                 out.unlink(missing_ok=True)
@@ -672,6 +735,7 @@ def generate():
             if new_id
             else (cloud_url or url_for("download", filename=out.name))
         )
+
         return jsonify(
             ok=True,
             download=download_link,
