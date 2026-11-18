@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Такрир — Загрузка в Google Drive и QR-коды</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --muted: #64748b;
+      --accent: #00a884;
+      --accent-dark: #008f72;
+      --accent-soft: #ecfdf5;
+      --blue: #2563eb;
+      --blue-soft: #eff6ff;
+      --danger: #ef4444;
+      --danger-soft: #fef2f2;
+      --warning: #f59e0b;
+      --radius: 14px;
+      --shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: #fff;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.14);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-icon {
+      width: 40px; height: 40px;
+      border-radius: 11px;
+      background: var(--accent);
+      display: grid; place-items: center;
+      font-size: 20px; font-weight: 800;
+    }
+    .brand h1 { font-size: 1.15rem; font-weight: 700; }
+    .brand span { font-size: 0.8rem; color: #94a3b8; display: block; }
+
+    .auth-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .user-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,0.1);
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+    }
+    .user-pill img {
+      width: 24px; height: 24px; border-radius: 50%;
+    }
+    .status-dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: #94a3b8;
+    }
+    .status-dot.online { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+
+    button {
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      transition: all 0.16s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+    }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      padding: 10px 18px;
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-dark); }
+
+    .btn-google {
+      background: #fff;
+      color: #0f172a;
+      padding: 9px 16px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+    .btn-google:hover { background: #f8fafc; }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 14px;
+    }
+    .btn-outline:hover { background: #f8fafc; }
+
+    .btn-danger-soft {
+      background: var(--danger-soft);
+      color: var(--danger);
+      padding: 7px 11px;
+    }
+    .btn-danger-soft:hover { background: #fee2e2; }
+
+    .btn-blue-soft {
+      background: var(--blue-soft);
+      color: var(--blue);
+      padding: 7px 11px;
+    }
+    .btn-blue-soft:hover { background: #dbeafe; }
+
+    .container {
+      max-width: 1240px;
+      margin: 24px auto;
+      padding: 0 18px;
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 22px;
+      align-items: start;
+    }
+    @media (max-width: 920px) {
+      .container { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow);
+    }
+    .card-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .field { margin-bottom: 14px; }
+    .field label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 5px;
+    }
+    .input, select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      background: #fff;
+      color: var(--text);
+      transition: border-color 0.15s;
+    }
+    .input:focus, select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .curator-row {
+      display: flex;
+      gap: 8px;
+    }
+    .curator-row select { flex: 1; }
+
+    .dropzone {
+      border: 2px dashed #cbd5e1;
+      border-radius: 12px;
+      padding: 24px 16px;
+      text-align: center;
+      background: #f8fafc;
+      cursor: pointer;
+      transition: all 0.18s;
+      margin-bottom: 14px;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .dropzone-icon { font-size: 32px; margin-bottom: 6px; }
+    .dropzone p { font-size: 0.9rem; font-weight: 600; color: #334155; }
+    .dropzone small { font-size: 0.78rem; color: var(--muted); }
+
+    .selected-file {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: var(--accent-soft);
+      border: 1px solid #a7f3d0;
+      padding: 10px 12px;
+      border-radius: 10px;
+      margin-bottom: 14px;
+      font-size: 0.85rem;
+    }
+    .selected-file.visible { display: flex; }
+
+    .progress-wrap {
+      display: none;
+      margin-top: 12px;
+    }
+    .progress-wrap.visible { display: block; }
+    .progress-bar-bg {
+      width: 100%;
+      height: 10px;
+      background: #e2e8f0;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), #10b981);
+      transition: width 0.2s ease;
+    }
+    .progress-text {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 5px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 16px;
+      align-items: center;
+    }
+    .search-box {
+      flex: 1;
+      min-width: 200px;
+      position: relative;
+    }
+    .search-box input { padding-left: 34px; }
+    .search-box::before {
+      content: "🔍";
+      position: absolute;
+      left: 11px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 0.85rem;
+      opacity: 0.6;
+    }
+
+    .stats-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .stat-badge {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #334155;
+    }
+    .stat-badge strong { color: var(--accent-dark); }
+
+    .files-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+      gap: 14px;
+    }
+    .file-card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 12px;
+      transition: transform 0.14s, box-shadow 0.14s;
+    }
+    .file-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(15,23,42,0.07);
+    }
+    .file-top {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .qr-thumb {
+      width: 82px;
+      height: 82px;
+      flex-shrink: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 4px;
+      background: #fff;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+    }
+    .qr-thumb img, .qr-thumb canvas {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: contain;
+    }
+    .file-meta { flex: 1; min-width: 0; }
+    .file-number {
+      display: inline-block;
+      background: var(--accent-soft);
+      color: var(--accent-dark);
+      font-weight: 800;
+      font-size: 0.92rem;
+      padding: 2px 9px;
+      border-radius: 7px;
+      margin-bottom: 4px;
+    }
+    .file-curator {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 2px;
+    }
+    .file-name {
+      font-size: 0.82rem;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .file-date {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      margin-top: 3px;
+    }
+    .file-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      border-top: 1px solid #f1f5f9;
+      padding-top: 10px;
+    }
+    .file-actions button, .file-actions a {
+      font-size: 0.78rem;
+      padding: 6px 10px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 48px 20px;
+      color: var(--muted);
+      border: 1.5px dashed var(--border);
+      border-radius: 12px;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.55);
+      display: none;
+      place-items: center;
+      padding: 16px;
+      z-index: 100;
+    }
+    .modal-backdrop.open { display: grid; }
+    .modal {
+      background: #fff;
+      border-radius: 16px;
+      max-width: 440px;
+      width: 100%;
+      padding: 22px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+      animation: pop 0.16s ease;
+    }
+    @keyframes pop {
+      from { transform: scale(0.95); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .modal-header h3 { font-size: 1.05rem; }
+    .close-btn {
+      background: #f1f5f9;
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      font-size: 1.1rem;
+    }
+
+    .curator-list {
+      max-height: 220px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .curator-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .qr-modal-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      text-align: center;
+    }
+    #bigQrContainer {
+      padding: 14px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #0f172a;
+      color: #fff;
+      padding: 12px 18px;
+      border-radius: 11px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      z-index: 200;
+      opacity: 0;
+      transform: translateY(10px);
+      pointer-events: none;
+      transition: all 0.2s;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    .banner-warn {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      color: #92400e;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.83rem;
+      margin-bottom: 14px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="brand-icon">QR</div>
+      <div>
+        <h1>Такрир — Загрузка в Google Drive</h1>
+        <span>Папка «Такрир» • Автоматический QR-код с общим доступом</span>
+      </div>
+    </div>
+
+    <div class="auth-bar">
+      <div class="user-pill" id="userStatusPill">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="userLabel">Google Drive не подключён</span>
+      </div>
+      <button class="btn-google" id="btnLogin" onclick="handleGoogleSignIn()">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        Войти через Google
+      </button>
+      <button class="btn-outline" id="btnLogout" style="display:none; color:#fff; border-color:rgba(255,255,255,0.25);" onclick="handleGoogleSignOut()">
+        Выйти
+      </button>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <div class="card-title">
+        <span>📤 Новая загрузка</span>
+        <button class="btn-outline" style="font-size:0.78rem; padding:5px 10px;" onclick="openCuratorModal()">
+          👥 Кураторы
+        </button>
+      </div>
+
+      <div class="banner-warn" id="authBanner">
+        Нажмите <strong>«Войти через Google»</strong> вверху, чтобы загружать видео и фото в папку <strong>«Такрир»</strong> и автоматически открывать доступ по ссылке.
+      </div>
+
+      <div class="field">
+        <label for="fileNumberInput">Номер файла *</label>
+        <input type="text" id="fileNumberInput" class="input" placeholder="Например: 1245 или №-089" />
+      </div>
+
+      <div class="field">
+        <label for="curatorSelect">Куратор *</label>
+        <div class="curator-row">
+          <select id="curatorSelect"></select>
+          <button type="button" class="btn-outline" title="Добавить куратора" onclick="openCuratorModal()">+</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Видео или фото *</label>
+        <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+          <div class="dropzone-icon">🎬 📸</div>
+          <p>Нажмите или перетащите видео / фото сюда</p>
+          <small>Поддерживаются MP4, MOV, JPG, PNG и любые другие медиафайлы</small>
+        </div>
+        <input type="file" id="fileInput" accept="video/*,image/*" style="display:none" />
+
+        <div class="selected-file" id="selectedFileBox">
+          <span id="selectedFileName" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+          <button type="button" class="btn-danger-soft" onclick="clearSelectedFile()">✕</button>
+        </div>
+      </div>
+
+      <button type="button" class="btn-primary" id="btnUpload" style="width:100%; padding:12px;" onclick="uploadToGoogleDrive()">
+        🚀 Загрузить в папку «Такрир» и создать QR
+      </button>
+
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="progressFill"></div>
+        </div>
+        <div class="progress-text">
+          <span id="progressLabel">Подготовка...</span>
+          <span id="progressPercent">0%</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">
+        <span>📁 Файлы в папке «Такрир»</span>
+        <div style="display:flex; gap:8px;">
+          <button class="btn-outline" style="font-size:0.8rem; padding:6px 11px;" onclick="syncFromGoogleDrive()" title="Обновить список из Google Drive">
+            🔄 Синхронизировать
+          </button>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <div class="search-box">
+          <input type="text" id="searchInput" class="input" placeholder="Поиск по номеру файла или названию..." oninput="renderFiles()" />
+        </div>
+        <select id="filterCurator" style="width:auto; min-width:175px;" onchange="renderFiles()">
+          <option value="ALL">Все кураторы</option>
+        </select>
+      </div>
+
+      <div class="stats-row" id="statsRow"></div>
+      <div id="filesContainer"></div>
+    </section>
+  </main>
+
+  <div class="modal-backdrop" id="curatorModal" onclick="if(event.target===this) closeCuratorModal()">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>👥 Управление кураторами</h3>
+        <button class="close-btn" onclick="closeCuratorModal()">✕</button>
+      </div>
+      <div class="curator-row">
+        <input type="text" id="newCuratorName" class="input" placeholder="Имя нового куратора..." onkeydown="if(event.key==='Enter') addCurator()" />
+        <button class="btn-primary" onclick="addCurator()">Добавить</button>
+      </div>
+      <div class="curator-list" id="curatorList"></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="qrModal" onclick="if(event.target===this) closeQrModal()">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="qrModalTitle">QR-код файла</h3>
+        <button class="close-btn" onclick="closeQrModal()">✕</button>
+      </div>
+      <div class="qr-modal-box">
+        <div id="bigQrContainer"></div>
+        <div id="qrModalMeta" style="font-size:0.88rem; color:#475569;"></div>
+        <div style="display:flex; gap:10px; width:100%;">
+          <button class="btn-primary" style="flex:1;" onclick="downloadBigQr()">⬇ Скачать QR-код (PNG)</button>
+          <button class="btn-outline" onclick="copyCurrentQrLink()">📋 Копировать ссылку</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const GOOGLE_CLIENT_ID = '252431730992-23f5r72b4iq9j9nvh42nufb3d7u4983j.apps.googleusercontent.com';
+    const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
+    const FOLDER_NAME = 'Такрир';
+
+    let tokenClient = null;
+    let accessToken = null;
+    let tokenExpiresAt = 0;
+    let currentUser = null;
+    let takrirFolderId = null;
+    let selectedFile = null;
+    let activeQrItem = null;
+
+    const DEFAULT_CURATORS = ['Куратор 1', 'Куратор 2', 'Куратор 3'];
+
+    function storageKey(base) {
+      const uid = currentUser?.email || 'guest';
+      return `${base}_${uid}`;
+    }
+
+    function getCurators() {
+      const raw = localStorage.getItem(storageKey('takrir_curators'));
+      if (!raw) {
+        localStorage.setItem(storageKey('takrir_curators'), JSON.stringify(DEFAULT_CURATORS));
+        return [...DEFAULT_CURATORS];
+      }
+      try { return JSON.parse(raw); } catch { return [...DEFAULT_CURATORS]; }
+    }
+
+    function saveCurators(list) {
+      localStorage.setItem(storageKey('takrir_curators'), JSON.stringify(list));
+      refreshCuratorSelects();
+      renderCuratorModalList();
+    }
+
+    function getFiles() {
+      const raw = localStorage.getItem(storageKey('takrir_files'));
+      if (!raw) return [];
+      try { return JSON.parse(raw); } catch { return []; }
+    }
+
+    function saveFiles(list) {
+      localStorage.setItem(storageKey('takrir_files'), JSON.stringify(list));
+      renderFiles();
+    }
+
+    function showToast(msg) {
+      const el = document
