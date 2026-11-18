@@ -21,6 +21,69 @@
             color: #333;
         }
 
+        /* БАШКЫ 2 ПАПКА (QR-код жасоо / PDF жасоо) */
+        .main-folders-bar {
+            max-width: 860px;
+            margin: 0 auto 18px auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+
+        .folder-card-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 16px 20px;
+            border-radius: 14px;
+            border: 2px solid #cbd5e1;
+            background: #ffffff;
+            color: #1e293b;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            transition: all 0.2s ease;
+        }
+
+        .folder-card-btn:hover {
+            transform: translateY(-2px);
+            border-color: #94a3b8;
+        }
+
+        .folder-card-btn.active-qr {
+            background: linear-gradient(135deg, #008f72, #00a884);
+            color: #ffffff;
+            border-color: #008f72;
+            box-shadow: 0 6px 18px rgba(0, 168, 132, 0.28);
+        }
+
+        .folder-card-btn.active-pdf {
+            background: linear-gradient(135deg, #1d4ed8, #2563eb);
+            color: #ffffff;
+            border-color: #1d4ed8;
+            box-shadow: 0 6px 18px rgba(37, 99, 235, 0.28);
+        }
+
+        .qr-workspace-wrapper {
+            max-width: 1280px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+            border: 1px solid #cbd5e1;
+            display: none;
+        }
+
+        .qr-workspace-wrapper iframe {
+            width: 100%;
+            height: 85vh;
+            border: none;
+            display: block;
+        }
+
         .container {
             max-width: 860px;
             margin: 0 auto;
@@ -120,6 +183,14 @@
             outline: none;
             border-color: #2563eb;
             box-shadow: 0 0 0 2px #bfdbfe;
+        }
+
+        .auto-link-badge {
+            margin-top: 5px;
+            font-size: 12.5px;
+            font-weight: 700;
+            color: #059669;
+            display: none;
         }
 
         .radio-group-box {
@@ -539,6 +610,7 @@
 
         @media (max-width: 700px) {
             body { padding: 10px; }
+            .main-folders-bar { grid-template-columns: 1fr; }
             .container { padding: 18px; }
             .category-tabs { grid-template-columns: 1fr; }
             .form-grid { grid-template-columns: 1fr; }
@@ -552,7 +624,23 @@
 
 <body>
 
-<div class="container">
+<!-- 2 НЕГИЗГИ ПАПКА -->
+<div class="main-folders-bar">
+    <button type="button" id="folderBtnQr" class="folder-card-btn" onclick="openMainFolder('qr')">
+        📁 QR-код жасоо
+    </button>
+    <button type="button" id="folderBtnPdf" class="folder-card-btn active-pdf" onclick="openMainFolder('pdf')">
+        📁 PDF жасоо
+    </button>
+</div>
+
+<!-- 1-ПАПКА: QR-КОД ЖАСОО (ТАКРИР САЙТЫ ЭЧ ЖЕРИ БУЗУЛБАЙ АЧЫЛАТ) -->
+<div id="qrFolderSection" class="qr-workspace-wrapper">
+    <iframe id="qrTakrirFrame" src="/static/takrir.html" allow="camera; microphone; fullscreen"></iframe>
+</div>
+
+<!-- 2-ПАПКА: PDF ЖАСОО (3 ВКЛАДКА ӨЗҮ КАНДАЙ БОЛСО ОШОНДОЙ КАЛАТ) -->
+<div id="pdfFolderSection" class="container">
 
     <div class="category-tabs">
         <button type="button" id="tabArmala" class="tab-btn active-armala" onclick="switchCategory('armala')">
@@ -575,13 +663,14 @@
 
             <div class="form-group full-width" id="fileNumberGroup">
                 <label>رقم الملف (Файл №) - Базага сактоо үчүн</label>
-                <input type="text" name="file_number" id="fileNumber" class="file-number-input" placeholder="Мисалы: 00125" required autocomplete="off">
+                <input type="text" name="file_number" id="fileNumber" class="file-number-input" placeholder="Мисалы: 1245" required autocomplete="off">
             </div>
 
             <!-- АРМАЛА / СИРОТЫ ТАЛААЛАРЫ -->
             <div class="form-group full-width standard-field">
                 <label>رابط الفيديو / الملف (Шилتهме - QR код түзүү үчүн)</label>
-                <input type="text" name="link" placeholder="https://...">
+                <input type="text" name="link" id="videoLinkInput" placeholder="https://...">
+                <div id="autoLinkBadge" class="auto-link-badge"></div>
             </div>
 
             <div class="form-group standard-field">
@@ -686,7 +775,7 @@
                 <select name="address" dir="rtl">
                     <option value=""></option>
                     <option value="محافظة تشوي">محافظة تشوي</option>
-                     <option value="محافظة تشوي مدينة بيشكيك">محافظة تشوي مدينة بيشكيك</option>
+                    <option value="محافظة تشوي مدينة بيشكيك">محافظة تشوي مدينة بيشكيك</option>
                     <option value="محافظة أوش">محافظة أوش</option>
                     <option value="محافظة جلال آباد">محافظة جلال آباد</option>
                     <option value="محافظة باتكين">محافظة باتكين</option>
@@ -750,6 +839,80 @@
 </div>
 
 <script>
+    /* =========================================================
+       2 ПАПКАНЫ БАШКАРУУ ЖАНА ФАЙЛ НОМЕР АРКЫЛУУ ШИЛТЕМЕ ТАБУУ
+    ========================================================= */
+    function openMainFolder(folder) {
+        const qrSection = document.getElementById('qrFolderSection');
+        const pdfSection = document.getElementById('pdfFolderSection');
+        const btnQr = document.getElementById('folderBtnQr');
+        const btnPdf = document.getElementById('folderBtnPdf');
+
+        if (folder === 'qr') {
+            qrSection.style.display = 'block';
+            pdfSection.style.display = 'none';
+            btnQr.className = 'folder-card-btn active-qr';
+            btnPdf.className = 'folder-card-btn';
+        } else {
+            qrSection.style.display = 'none';
+            pdfSection.style.display = 'block';
+            btnQr.className = 'folder-card-btn';
+            btnPdf.className = 'folder-card-btn active-pdf';
+            // PDF папкасына кайтып келгенде, эгер файл номери жазылып турган болсо шилтемесин кайра текшерет
+            autoFillLinkFromTakrir(document.getElementById('fileNumber').value);
+        }
+    }
+
+    // Такрир (QR-код жасоо) папкасында катталган бардык файлдардын ичинен номер боюнча издөө
+    function findTakrirLinkByNumber(rawNumber) {
+        const target = String(rawNumber || '').trim();
+        if (!target) return null;
+
+        try {
+            // Бардык takrir_files_* ачкычтарын текшеребиз (кайсы Google аккаунт болбосун табат)
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith('takrir_files_')) {
+                    const list = JSON.parse(localStorage.getItem(key) || '[]');
+                    if (Array.isArray(list)) {
+                        const found = list.find(item =>
+                            item &&
+                            String(item.number || '').trim() === target &&
+                            (item.url || item.driveWebViewLink || item.driveId)
+                        );
+                        if (found) {
+                            return found.url || found.driveWebViewLink || ('https://drive.google.com/file/d/' + encodeURIComponent(found.driveId) + '/view?usp=sharing');
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('Takrir шилтемесин издөөдө ката:', e);
+        }
+        return null;
+    }
+
+    let lastAutoFilledLink = '';
+    function autoFillLinkFromTakrir(numberVal) {
+        const linkInput = document.getElementById('videoLinkInput');
+        const badge = document.getElementById('autoLinkBadge');
+        if (!linkInput || !badge) return;
+
+        const foundUrl = findTakrirLinkByNumber(numberVal);
+        if (foundUrl) {
+            linkInput.value = foundUrl;
+            lastAutoFilledLink = foundUrl;
+            badge.textContent = '✓ QR-код жасоо базасынан ушул файл номеринин шилтемеси автоматтык табылды!';
+            badge.style.display = 'block';
+        } else {
+            if (lastAutoFilledLink && linkInput.value === lastAutoFilledLink) {
+                linkInput.value = '';
+            }
+            lastAutoFilledLink = '';
+            badge.style.display = 'none';
+        }
+    }
+
     const form = document.getElementById('reportForm');
     const statusDiv = document.getElementById('status');
     const btn = document.getElementById('submitBtn');
@@ -788,9 +951,18 @@
         bitokoIssueDate.value = todayFormatted();
     }
 
+    // Файл номери жазылганда ички номерди жана QR-код базасындагы шилтемени автоматтык коёт
     fileNumberInput.addEventListener('input', () => {
         if (bitokoInternalNumber) {
             bitokoInternalNumber.value = fileNumberInput.value;
+        }
+        autoFillLinkFromTakrir(fileNumberInput.value);
+    });
+
+    // Эгер Такрир папкасында видео жаңы эле жүктөлсө, PDF формасында да дароо жаңыланат
+    window.addEventListener('storage', (e) => {
+        if (e.key && e.key.startsWith('takrir_files_')) {
+            autoFillLinkFromTakrir(fileNumberInput.value);
         }
     });
 
@@ -867,7 +1039,7 @@
         'молдобек': 'ملا بك', 'мукаш': 'موكاش', 'муктасар': 'مختصر', 'мунар': 'منار', 'мунарбек': 'منار بك',
         'мурадил': 'مراد عادل', 'мурат': 'مراد', 'муратбек': 'مراد بك', 'муса': 'موسى', 'мустафа': 'مصطفى',
         'муталип': 'مطلب', 'мухаммад': 'محمد', 'мухаммед': 'محمد', 'мухтар': 'مختار', 'мүсүралы': 'مصر علي',
-        'мырза': 'ميرزا', 'мырзабек': 'ميرزا بك',
+        'мырзайым': 'ميرزا آييم', 'мырзагүл': 'ميرزا غول', 'мырза': 'ميرزا', 'мырзабек': 'ميرزا بك',
         'назар': 'نظر', 'назарбек': 'نظر بك', 'назим': 'ناظم', 'назир': 'نذير', 'нариман': 'ناريمان',
         'нарынбек': 'نارين بك', 'насир': 'ناصر', 'насип': 'نصيب', 'насипбек': 'نصيب بك', 'немат': 'نعمة',
         'нияз': 'نياز', 'ниязбек': 'نياز بك', 'нооруз': 'نوروز', 'ноорузбек': 'نوروز بك', 'нур': 'نور',
@@ -986,7 +1158,6 @@
         'мейизгүл': 'ماييز غول', 'мейликан': 'ميلي كان', 'мелиса': 'ميليسا', 'мээрим': 'ميريم',
         'мээримгүл': 'ميريم غول', 'милана': 'ميلانا', 'мингүл': 'مين غول', 'мираида': 'ميرايدا', 'миргул': 'مير غول',
         'мохинур': 'ماهي نور', 'мубарак': 'مبارك', 'мунара': 'منارة', 'мунира': 'منيرة', 'мүлкүкан': 'مولكو كان',
-        'мырзайым': 'ميرزا آييم', 'мырзагүл': 'ميرزا غول',
         'назгул': 'ناز غول', 'назик': 'نازك', 'назира': 'نظيرة', 'назбийке': 'ناز بيكه', 'наркүл': 'نار غول',
         'насикат': 'نصيحة', 'насипа': 'نصيبة', 'насыйкат': 'نصيحة', 'несип': 'نصيب', 'нестан': 'نيستان',
         'нигора': 'نيغورا', 'нилуфар': 'نيلوفر', 'нурай': 'نور آي', 'нурайым': 'نور آييم', 'нурбийке': 'نور بيكه',
@@ -1650,6 +1821,8 @@
                     </div>
                 `;
                 form.reset();
+                lastAutoFilledLink = '';
+                document.getElementById('autoLinkBadge').style.display = 'none';
                 categoryInput.value = currentCategory;
                 if (bitokoIssueDate) bitokoIssueDate.value = todayFormatted();
                 clearSelection();
