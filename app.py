@@ -530,7 +530,7 @@ def list_pdfs():
                 "file_number": r["file_number"],
                 "category": r["category"],
                 "beneficiary": r["beneficiary"] or "",
-                "name": r["pdf_filename"] or f"PDF_{r['file_number']}.pdf",
+               "name": r["file_number"],
                 "download_url": url_for("force_download_pdf", item_id=r["id"]),
                 "is_downloaded": bool(r["is_downloaded"]),
                 "created_at": r["created_at"],
