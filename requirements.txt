@@ -5,4 +5,5 @@ qrcode==8.2
 gunicorn
 opencv-python-headless==4.8.0.76
 numpy==1.26.4
-cloudinary
+google-api-python-client
+google-auth
