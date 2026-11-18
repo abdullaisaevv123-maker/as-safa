@@ -1,18 +1,16 @@
 import os
 import io
-import json
 import sqlite3
 import tempfile
 from datetime import datetime
-from flask import Flask, request, jsonify, render_template, redirect
+from flask import Flask, request, jsonify, render_template
 import fitz  # PyMuPDF
 from PIL import Image, ImageOps
 import qrcode
 import cv2
 import numpy as np
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
+import cloudinary
+import cloudinary.uploader
 
 app = Flask(__name__)
 
@@ -24,46 +22,25 @@ DB_PATH = os.path.join(BASE_DIR, 'beneficiaries.db')
 TEMPLATE_ARMALA = os.path.join(BASE_DIR, 'template.pdf')
 TEMPLATE_SIROTY = os.path.join(BASE_DIR, 'template_siroty.pdf')
 
-GOOGLE_DRIVE_FOLDER_ID = os.environ.get('GOOGLE_DRIVE_FOLDER_ID', '').strip()
-GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON', '').strip()
+cloudinary.config(
+    cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME', '').strip(),
+    api_key=os.environ.get('CLOUDINARY_API_KEY', '').strip(),
+    api_secret=os.environ.get('CLOUDINARY_API_SECRET', '').strip(),
+    secure=True
+)
 
 
-def get_drive_service():
-    if not GOOGLE_SERVICE_ACCOUNT_JSON:
-        raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_JSON орнотулган эмес!")
-    info = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
-    creds = service_account.Credentials.from_service_account_info(
-        info,
-        scopes=['https://www.googleapis.com/auth/drive']
+def upload_pdf_to_cloudinary(file_path, filename, category):
+    public_id = os.path.splitext(filename)[0]
+    folder_name = f"as_safa/{category}"
+    result = cloudinary.uploader.upload(
+        file_path,
+        resource_type="raw",
+        public_id=public_id,
+        folder=folder_name,
+        overwrite=True
     )
-    return build('drive', 'v3', credentials=creds, cache_discovery=False)
-
-
-def upload_pdf_to_drive(file_path, filename):
-    if not GOOGLE_DRIVE_FOLDER_ID:
-        raise RuntimeError("GOOGLE_DRIVE_FOLDER_ID орнотулган эмес!")
-
-    service = get_drive_service()
-    file_metadata = {
-        'name': filename,
-        'parents': [GOOGLE_DRIVE_FOLDER_ID]
-    }
-    media = MediaFileUpload(file_path, mimetype='application/pdf', resumable=False)
-    created = service.files().create(
-        body=file_metadata,
-        media_body=media,
-        fields='id, webContentLink, webViewLink'
-    ).execute()
-
-    file_id = created.get('id')
-    # Шилтеме аркылуу кирген ар бир адам жүктөй алышы үчүн уруксат беребиз
-    service.permissions().create(
-        fileId=file_id,
-        body={'type': 'anyone', 'role': 'reader'}
-    ).execute()
-
-    download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-    return download_url
+    return result.get('secure_url')
 
 
 def init_db():
@@ -287,8 +264,8 @@ def generate_pdf():
         doc.save(temp_pdf_path)
         doc.close()
 
-        # Түз Google Drive папкасына жүктөйбүз
-        download_url = upload_pdf_to_drive(temp_pdf_path, pdf_filename)
+        # Түз Cloudinary булутуна жүктөйбүз
+        download_url = upload_pdf_to_cloudinary(temp_pdf_path, pdf_filename, category)
 
         # Сервердеги убактылуу файлды өчүрөбүз
         if temp_pdf_path and os.path.exists(temp_pdf_path):
