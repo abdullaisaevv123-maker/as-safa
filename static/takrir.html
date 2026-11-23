@@ -23,17 +23,17 @@ Do NOT put a Client Secret in this HTML.
 ===========================================================
  ТАКРИР — WHATSAPP STYLE
  Негизги функциялар:
- 1. Google аккаунт менен кирүү
- 2. WhatsApp сыяктуу сол жактагы файл номерлеринин тизмеси
- 3. + баскычы → файл номери → Улантуу → видео → Каттоо
- 4. Google Drive'ге видео жүктөө
- 5. Файл номерин басканда видео + ссылка + QR
- 6. Ссылка көчүрүү / QR көчүрүү / Бөлүшүү
- 7. Үч чекит → Настройка
- 8. Google Drive папкасын тандоо
- 9. Тандалган папканы настройкада көрсөтүү
- 10. Баракты F5 кылганда ошол эле бетте калуу
- 11. localStorage аркылуу браузерде катталган файлдарды сактоо
+1. Google аккаунт менен кирүү
+2. WhatsApp сыяктуу сол жактагы файл номерлеринин тизмеси
+3. + баскычы → файл номери → Улантуу → видео → Каттоо
+4. Google Drive'ге видео жүктөө
+5. Файл номерин басканда видео + ссылка + QR
+6. Ссылка көчүрүү / QR көчүрүү / Бөлүшүү
+7. Үч чекит → Настройка
+8. Google Drive папкасын тандоо
+9. Тандалган папканы настройкада көрсөтүү
+10. Баракты F5 кылганда ошол эле бетте калуу
+11. localStorage аркылуу браузерде катталган файлдарды сактоо
 
  ЭСКЕРТҮҮ:
  Google аккаунт менен кирүү үчүн Web OAuth Client ID орнотулду.
@@ -1690,7 +1690,7 @@ body.dark-mode .file-card{background:#202c33;color:#e9edef}
 <div id="plusMediaChooser" class="plus-media-chooser" aria-hidden="true">
     <button type="button" class="plus-media-option plus-video" onclick="chooseMediaType('video')" title="Видео" aria-label="Видео">🎥</button>
     <button type="button" class="plus-media-option plus-photo" onclick="chooseMediaType('photo')" title="Сүрөт" aria-label="Сүрөт">📷</button>
-    <button type="button" class="plus-media-option plus-camera" onclick="openNativeMediaCapture()" title="Камера" aria-label="Камера">📹</button>
+    <button type="button" class="plus-media-option plus-camera" onclick="openFolderBatchUpload()" title="Папка тандоо" aria-label="Папка тандоо">📁</button>
 </div>
 <div id="floatingActions" class="floating-actions">
   <button id="floatingPlus" class="floating-plus" title="Файл кошуу" onclick="togglePlusMediaChooser()">＋</button>
@@ -1743,8 +1743,8 @@ const GOOGLE_CLIENT_ID =
     "1070875797774-03j7qfohho2n7f2s2cvjbiqmasi55gue.apps.googleusercontent.com";
 
 /*
- * Google OAuth Client ID жогоруда коюлган.
- * Client Secret HTML файлына КОЮЛБАЙТ.
+- Google OAuth Client ID жогоруда коюлган.
+- Client Secret HTML файлына КОЮЛБАЙТ.
  */
 
 const DRIVE_SCOPE = [
@@ -2114,6 +2114,250 @@ async function registerVideo(){
     }
 }
 
+/* =========================================================
+   ПАПКА ТАНДОО ЖАНА ИЧИНДЕГИ БААРДЫК ВИДЕОЛОРДУ БИР УЧУРДА ЖҮКТӨӨ
+========================================================= */
+function getFolderBatchInput(){
+  let input=document.getElementById('folderBatchInput');
+  if(!input){
+    input=document.createElement('input');
+    input.type='file';
+    input.id='folderBatchInput';
+    input.setAttribute('webkitdirectory','');
+    input.setAttribute('directory','');
+    input.setAttribute('multiple','');
+    input.style.cssText='position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;';
+    input.addEventListener('change',handleFolderBatchSelection);
+    document.body.appendChild(input);
+  }
+  return input;
+}
+
+function openFolderBatchUpload(){
+  closePlusMediaChooser();
+
+  if(!window.takrirActiveCurator){
+    showToast('Адегенде кураторду тандаңыз.');
+    const manager=document.getElementById('curatorManager');if(manager)manager.style.display='block';
+    const backdrop=document.getElementById('curatorBackdrop');if(backdrop)backdrop.style.display='block';
+    return;
+  }
+
+  const folder=getSelectedFolder();
+  if(!folder?.id){
+    showToast('«'+window.takrirActiveCurator+'» үчүн Google Drive папкасын тандаңыз.');
+    openSettings();
+    return;
+  }
+
+  const input=getFolderBatchInput();
+  input.value='';
+  try{
+    input.click();
+  }catch(e){
+    showToast('Папка тандоо терезесин ачуу мүмкүн болгон жок.');
+  }
+}
+
+function extractFileNumberFromFile(file){
+  const rawName=String(file.name||'').trim();
+  const baseName=rawName.replace(/\.[^.]+$/,'').trim();
+  return baseName.replace(/\s+/g,'');
+}
+
+function isSupportedBatchVideo(file){
+  if(!file || !file.size) return false;
+  if(file.type && file.type.startsWith('video/')) return true;
+  return /\.(mp4|mov|avi|mkv|webm|m4v|3gp|wmv)$/i.test(String(file.name||''));
+}
+
+async function handleFolderBatchSelection(event){
+  const allPicked=Array.from(event.target.files||[]);
+  if(!allPicked.length) return;
+
+  if(!window.takrirActiveCurator){
+    showToast('Адегенде кураторду тандаңыз.');
+    return;
+  }
+
+  const driveFolder=getSelectedFolder();
+  if(!driveFolder?.id){
+    showToast('⚠️ Алгач Настройкадан Google Drive папкасын тандаңыз.');
+    openSettings();
+    return;
+  }
+
+  if(!currentUser){
+    showToast('🔐 Алгач Google аккаунтту тандаңыз.');
+    return;
+  }
+
+  // Тандалган папканын атын текшерүү
+  const firstRelPath=String(allPicked[0].webkitRelativePath||'');
+  const pickedFolderName=firstRelPath.split('/')[0]||'Папка';
+
+  // Ичиндеги видеолорду гана тандайбыз
+  const videoFiles=allPicked.filter(isSupportedBatchVideo);
+  if(!videoFiles.length){
+    showToast('⚠️ «'+pickedFolderName+'» папкасынын ичинде видео файлдар табылган жок.');
+    return;
+  }
+
+  // Файлдын атынан номерлерди алып, иреттейбиз
+  videoFiles.sort((a,b)=>String(a.name).localeCompare(String(b.name),undefined,{numeric:true,sensitivity:'base'}));
+
+  const existingFiles=getFiles();
+  const activeCurator=String(window.takrirActiveCurator||'');
+  const existingNumbers=new Set(
+    existingFiles
+      .filter(f=>Number(f.year||takrirYear)===Number(takrirYear) && (!activeCurator || String(f.curator||'')===activeCurator))
+      .map(f=>String(f.number||'').trim())
+  );
+
+  const queue=[];
+  const seenInBatch=new Set();
+  let skippedDuplicates=0;
+
+  for(const file of videoFiles){
+    const number=extractFileNumberFromFile(file);
+    if(!number) continue;
+    if(existingNumbers.has(number) || seenInBatch.has(number)){
+      skippedDuplicates++;
+      continue;
+    }
+    seenInBatch.add(number);
+
+    const tempId='batch-'+Date.now()+'-'+Math.random().toString(36).slice(2);
+    const item={
+      id:tempId,
+      number:number,
+      personName:'',
+      name:file.name,
+      type:'video',
+      url:'',
+      driveId:null,
+      mimeType:file.type||'video/mp4',
+      size:file.size,
+      date:new Date().toLocaleString('ky-KG'),
+      createdTime:new Date().toISOString(),
+      folder:driveFolder,
+      unread:true,
+      year:takrirYear,
+      curator:activeCurator,
+      uploading:true,
+      uploadProgress:0
+    };
+    queue.push({file,number,tempId,item});
+  }
+
+  if(!queue.length){
+    showToast('ℹ️ «'+pickedFolderName+'» папкасындагы видеолор мурун катталган.');
+    return;
+  }
+
+  // Баардык тандалган видеолорду тизмеге дароо кошобуз
+  saveFiles([...queue.map(q=>q.item),...getFiles()]);
+  if(typeof renderChatList==='function') renderChatList();
+
+  let msg='📁 «'+pickedFolderName+'»: '+queue.length+' видео жүктөлүүдө...';
+  if(skippedDuplicates>0) msg+=' ('+skippedDuplicates+' кайталанган өткөрүлдү)';
+  showToast(msg);
+
+  try{
+    if(!driveAccessToken) await ensureDriveToken();
+  }catch(err){
+    const failedIds=new Set(queue.map(q=>q.tempId));
+    const arr=getFiles().map(f=>failedIds.has(String(f.id))?{...f,uploading:false,uploadProgress:0,uploadError:'Google Drive уруксаты алынган жок'}:f);
+    saveFiles(arr);
+    if(typeof renderChatList==='function') renderChatList();
+    showToast('❌ Google Drive уруксаты алынган жок.');
+    return;
+  }
+
+  let successCount=0;
+  let failCount=0;
+  let cursor=0;
+  const CONCURRENCY=3; // Бир учурда 3 видеодон parallel жүктөйт (100-150 видео үчүн оптималдуу)
+
+  async function worker(){
+    while(cursor<queue.length){
+      const current=queue[cursor++];
+      try{
+        const dup=await findDriveFileByNumber(current.number);
+        if(dup){
+          const arr=getFiles().filter(x=>String(x.id)!==current.tempId);
+          saveFiles(arr);
+          if(typeof renderChatList==='function') renderChatList();
+          skippedDuplicates++;
+          continue;
+        }
+
+        const data=await uploadVideoToDrive(
+          current.file,
+          current.number,
+          function(percent){
+            const arr=getFiles();
+            const ix=arr.findIndex(x=>String(x.id)===current.tempId);
+            if(ix>=0){
+              arr[ix]={...arr[ix],uploadProgress:percent,uploading:percent<100};
+              saveFiles(arr);
+              if(typeof renderChatList==='function') renderChatList();
+            }
+          },
+          ''
+        );
+
+        const arr=getFiles();
+        const ix=arr.findIndex(x=>String(x.id)===current.tempId);
+        if(ix>=0){
+          arr[ix]={
+            ...arr[ix],
+            id:data.id,
+            driveId:data.id,
+            url:data.url,
+            driveWebViewLink:data.url,
+            uploading:false,
+            uploadProgress:100,
+            type:'video',
+            curator:activeCurator,
+            unread:true
+          };
+          saveFiles(arr);
+          if(typeof renderChatList==='function') renderChatList();
+        }
+        successCount++;
+      }catch(err){
+        console.error('Batch upload error for '+current.number+':',err);
+        failCount++;
+        const arr=getFiles();
+        const ix=arr.findIndex(x=>String(x.id)===current.tempId);
+        if(ix>=0){
+          arr[ix]={
+            ...arr[ix],
+            uploading:false,
+            uploadProgress:0,
+            uploadError:String(err?.message||err||'Ката')
+          };
+          saveFiles(arr);
+          if(typeof renderChatList==='function') renderChatList();
+        }
+      }
+    }
+  }
+
+  const workers=[];
+  for(let i=0;i<Math.min(CONCURRENCY,queue.length);i++){
+    workers.push(worker());
+  }
+  await Promise.all(workers);
+
+  if(failCount===0){
+    showToast('✅ «'+pickedFolderName+'»: '+successCount+' видео толук катталды!');
+  }else{
+    showToast('⚠️ '+successCount+' видео катталды, '+failCount+' видеодо ката кетти.');
+  }
+}
+
 function getNativeMediaInput(){
   let input=document.getElementById('nativeMediaInput');
   if(!input){
@@ -2130,9 +2374,6 @@ function getNativeMediaInput(){
 }
 
 function openNativeMediaCapture(){
-  // Бул функция түздөн-түз ➕ менюсүндөгү колдонуучунун басуусунан чакырылат.
-  // Android/iPhone: capture="environment" → түзмөктүн камера/медиа интерфейси.
-  // Компьютер: capture колдоого алынбаса → кадимки файл тандоо терезеси.
   const input=getNativeMediaInput();
   input.value='';
   try{
@@ -2159,20 +2400,16 @@ function handleNativeMediaSelection(event){
 
   closePlusMediaChooser();
 
-  // Файл тандалгандан кийин гана номер жана Ф.И.О. киргизүү ачылат.
   const status=document.getElementById('selectedFileName');
   if(status)status.textContent=(isPhoto?'📷 ':'🎥 ')+file.name;
 
   showToast(isPhoto?'📷 Сүрөт тандалды.':'🎥 Видео тандалды.');
 
-  // Учурдагы каттоо агымын колдонобуз. continueNumber() камера/медиа файлын сактап калат.
   openNumberModal();
 }
 
 async function openCameraCapture(){
     closePlusMediaChooser();
-    // Телефондо: браузердин ичиндеги камера эмес, түзмөктүн өзүнүн камера/медиа интерфейси.
-    // Компьютерде: кадимки файл тандоо терезеси ачылат.
     const input=document.getElementById('nativeCameraInput');
     if(input){
       input.value='';
@@ -2181,15 +2418,12 @@ async function openCameraCapture(){
 }
 function handleNativeCameraFile(file){
     if(!file) return;
-    // Камера/файл тандоодон алынган медианы кадимки каттоо агымына беребиз.
     window.selectedMediaFile = file;
     const isVideo = file.type && file.type.startsWith('video/');
     const type = isVideo ? 'video' : 'photo';
-    // Эгер номер талаасы мурда толтурулган болсо — кийинки каттоого даярдайбыз.
     if(typeof selectedMediaType !== 'undefined') selectedMediaType = type;
     if(typeof selectedFile !== 'undefined') selectedFile = file;
     if(typeof showToast === 'function') showToast((isVideo?'🎥 Видео':'📷 Сүрөт')+' тандалды: '+file.name);
-    // Бар болгон файл каттоо модалын колдонобуз.
     if(typeof openRegistrationModal === 'function'){
       try{ openRegistrationModal(type,file); }catch(e){}
     }else if(typeof showRegisterModal === 'function'){
@@ -2290,7 +2524,7 @@ async function findDriveFileByNumber(number){
 }
 
 async function unmarkDriveFileTakrir(driveId){
-    if(!driveId || String(driveId).startsWith("upload-") || String(driveId).startsWith("manual-")) return;
+    if(!driveId || String(driveId).startsWith("upload-") || String(driveId).startsWith("manual-") || String(driveId).startsWith("batch-")) return;
     try{
         let token = await ensureDriveToken(false);
         let r = await driveFetchWithTimeout(
@@ -4117,20 +4351,52 @@ body.dark-mode #sidebarPlusDock{background:#202c33;border-color:#33434d}
 (function(){
   const $=id=>document.getElementById(id);
   const MAX_CURATORS=10;
-  const curatorListKey=()=> 'takrir_curators_'+(currentUser?.sub||currentUser?.email||'guest');
-  const activeCuratorKey=()=> 'takrir_active_curator_'+(currentUser?.sub||currentUser?.email||'guest');
-  const curatorFolderKey=()=> 'takrir_folder_'+(currentUser?.sub||currentUser?.email||'guest')+'_curator_'+encodeURIComponent(window.takrirActiveCurator||'');
+  const GLOBAL_CURATOR_KEY='takrir_last_selected_curator';
+
+  const getUserKey=()=> (typeof currentUser!=='undefined' && (currentUser?.sub||currentUser?.email)) || 'guest';
+  const curatorListKey=()=> 'takrir_curators_'+getUserKey();
+  const activeCuratorKey=()=> 'takrir_active_curator_'+getUserKey();
+  const curatorFolderKey=()=> 'takrir_folder_'+getUserKey()+'_curator_'+encodeURIComponent(window.takrirActiveCurator||'');
+
   function loadCurators(){
-    try { const a=JSON.parse(localStorage.getItem(curatorListKey())||'[]'); return Array.isArray(a)?a.slice(0,MAX_CURATORS):[]; }
-    catch(e){return [];}
+    try {
+      let a=JSON.parse(localStorage.getItem(curatorListKey())||'[]');
+      if(!a.length && getUserKey()!=='guest'){
+        const guestList=JSON.parse(localStorage.getItem('takrir_curators_guest')||'[]');
+        if(guestList.length){
+          a=guestList;
+          localStorage.setItem(curatorListKey(),JSON.stringify(a));
+        }
+      }
+      return Array.isArray(a)?a.slice(0,MAX_CURATORS):[];
+    } catch(e){ return []; }
   }
-  function saveCurators(a){localStorage.setItem(curatorListKey(),JSON.stringify(a.slice(0,MAX_CURATORS)));}
-  window.takrirActiveCurator=localStorage.getItem(activeCuratorKey())||'';
+
+  function saveCurators(a){
+    const clean=a.slice(0,MAX_CURATORS);
+    localStorage.setItem(curatorListKey(),JSON.stringify(clean));
+    localStorage.setItem('takrir_curators_guest',JSON.stringify(clean));
+  }
+
+  function getSavedActiveCurator(){
+    return localStorage.getItem(activeCuratorKey()) || localStorage.getItem(GLOBAL_CURATOR_KEY) || '';
+  }
+
+  function persistActiveCurator(name){
+    const val=String(name||'');
+    window.takrirActiveCurator=val;
+    localStorage.setItem(activeCuratorKey(),val);
+    localStorage.setItem(GLOBAL_CURATOR_KEY,val);
+  }
+
+  window.takrirActiveCurator=getSavedActiveCurator();
   window.takrirGetCurators=loadCurators;
+
   window.takrirCloseCuratorManager=function(){
     const box=$('curatorManager');if(box)box.style.display='none';
     const bd=$('curatorBackdrop');if(bd)bd.style.display='none';
   };
+
   window.takrirOpenCuratorManager=function(){
     ensureCuratorUI();
     const box=$('curatorManager');if(!box)return;
@@ -4139,6 +4405,7 @@ body.dark-mode #sidebarPlusDock{background:#202c33;border-color:#33434d}
     renderCuratorRows();
     setTimeout(()=>$('newCuratorName')?.focus(),30);
   };
+
   window.takrirDeleteCurator=function(name){
     const target=String(name||'').trim();
     if(!target)return;
@@ -4146,19 +4413,20 @@ body.dark-mode #sidebarPlusDock{background:#202c33;border-color:#33434d}
     const names=loadCurators().filter(n=>n!==target);
     saveCurators(names);
     if(window.takrirActiveCurator===target){
-      window.takrirActiveCurator='';
-      localStorage.setItem(activeCuratorKey(),'');
+      const nextCurator=names.length ? names[0] : '';
+      persistActiveCurator(nextCurator);
     }
     renderCuratorSelect();
     if(typeof renderChatList==='function')renderChatList();
     if(typeof updateDriveFolderBox==='function')updateDriveFolderBox();
     showToast('🗑 «'+target+'» өчүрүлдү');
   };
-  window.takrirSetActiveCurator=function(name){
-    window.takrirActiveCurator=String(name||'');
-    localStorage.setItem(activeCuratorKey(),window.takrirActiveCurator);
-    const yearKey='takrir_year_'+(currentUser?.sub||currentUser?.email||'guest')+'_curator_'+encodeURIComponent(window.takrirActiveCurator||'all');
-    const savedYear=Number(localStorage.getItem(yearKey)||2027);
+
+  window.takrirSetActiveCurator=function(name, silent=false){
+    const val=String(name||'');
+    persistActiveCurator(val);
+    const yearKey='takrir_year_'+getUserKey()+'_curator_'+encodeURIComponent(val||'default');
+    const savedYear=Number(localStorage.getItem(yearKey)||localStorage.getItem('takrir_year')||2027);
     if(typeof takrirYear!=='undefined')takrirYear=savedYear;
     localStorage.setItem('takrir_year',String(savedYear));
     const yearEl=$('userYear');if(yearEl)yearEl.textContent=String(savedYear);
@@ -4169,15 +4437,22 @@ body.dark-mode #sidebarPlusDock{background:#202c33;border-color:#33434d}
     if(typeof renderChatList==='function')renderChatList();
     if(typeof updateDriveFolderBox==='function')updateDriveFolderBox();
     window.takrirCloseCuratorManager();
-    showToast(window.takrirActiveCurator?'👤 '+window.takrirActiveCurator+' тандалды':'Бардык кураторлор көрсөтүлөт');
+    if(!silent && val){
+      showToast('👤 '+val+' тандалды');
+    }
   };
+
   function ensureCuratorUI(){
     const year=$('userYear');
     if(year && !$('curatorControls')){
       const wrap=document.createElement('span');wrap.id='curatorControls';
-      wrap.innerHTML='<select id="curatorSelect" title="Кураторду тандоо"><option value="">Кураторду тандаңыз</option></select><button id="addCuratorBtn" type="button" title="Куратор кошуу">＋</button>';
+      wrap.innerHTML='<select id="curatorSelect" title="Кураторлор"><option value="">Кураторлор</option></select><button id="addCuratorBtn" type="button" title="Куратор кошуу">＋</button>';
       year.insertAdjacentElement('afterend',wrap);
-      $('curatorSelect').addEventListener('change',e=>window.takrirSetActiveCurator(e.target.value));
+      $('curatorSelect').addEventListener('change',e=>{
+        if(e.target.value){
+          window.takrirSetActiveCurator(e.target.value);
+        }
+      });
       $('addCuratorBtn').addEventListener('click',toggleCuratorManager);
     }
     if(!$('curatorBackdrop')){
@@ -4201,6 +4476,7 @@ body.dark-mode #sidebarPlusDock{background:#202c33;border-color:#33434d}
     }
     renderCuratorSelect();
   }
+
   function toggleCuratorManager(){
     const box=$('curatorManager');if(!box)return;
     if(box.style.display==='block'){
@@ -4209,14 +4485,29 @@ body.dark-mode #sidebarPlusDock{background:#202c33;border-color:#33434d}
       window.takrirOpenCuratorManager();
     }
   }
+
   function renderCuratorSelect(){
     const select=$('curatorSelect');if(!select)return;
-    const names=loadCurators();const active=window.takrirActiveCurator||'';
-    select.innerHTML='<option value="">Баары / куратор тандоо</option>'+names.map(n=>`<option value="${escapeAttr(n)}">${escapeHTML(n)}</option>`).join('');
-    select.value=names.includes(active)?active:'';
-    if(active && !names.includes(active)){window.takrirActiveCurator='';localStorage.setItem(activeCuratorKey(),'');}
+    const names=loadCurators();
+    let active=getSavedActiveCurator();
+
+    if(!names.length){
+      select.innerHTML='<option value="">Кураторлор</option>';
+      select.value='';
+      persistActiveCurator('');
+    }else{
+      if(!active || !names.includes(active)){
+        active=names[0];
+        persistActiveCurator(active);
+      }else{
+        window.takrirActiveCurator=active;
+      }
+      select.innerHTML=names.map(n=>`<option value="${escapeAttr(n)}">${escapeHTML(n)}</option>`).join('');
+      select.value=active;
+    }
     renderCuratorRows();
   }
+
   function renderCuratorRows(){
     const rows=$('curatorRows');if(!rows)return;
     const names=loadCurators();
@@ -4226,6 +4517,7 @@ body.dark-mode #sidebarPlusDock{background:#202c33;border-color:#33434d}
     if(btn && names.length>=MAX_CURATORS)btn.textContent='10 куратор кошулган';
     else if(btn)btn.textContent='＋ Куратор кошуу';
   }
+
   function addCurator(){
     const input=$('newCuratorName');const name=(input?.value||'').trim();
     if(!name){showToast('Куратордун атын жазыңыз.');return;}
@@ -4241,9 +4533,16 @@ body.dark-mode #sidebarPlusDock{background:#202c33;border-color:#33434d}
   window.folderStorageKey = window.folderStorageKey || null;
   folderStorageKey = curatorFolderKey;
   getSelectedFolder = function(){
-    try{return JSON.parse(localStorage.getItem(curatorFolderKey())||'null');}catch(e){return null;}
+    try{
+      return JSON.parse(localStorage.getItem(curatorFolderKey())||'null') ||
+             JSON.parse(localStorage.getItem('takrir_folder_guest_curator_'+encodeURIComponent(window.takrirActiveCurator||''))||'null');
+    }catch(e){return null;}
   };
-  saveSelectedFolder = function(folder){localStorage.setItem(curatorFolderKey(),JSON.stringify(folder));};
+  saveSelectedFolder = function(folder){
+    localStorage.setItem(curatorFolderKey(),JSON.stringify(folder));
+    localStorage.setItem('takrir_folder_guest_curator_'+encodeURIComponent(window.takrirActiveCurator||''),JSON.stringify(folder));
+  };
+
   // Папканы тандоо терезесиндеги белгилөө да активдүү кураторго гана сакталат.
   const oldChooseFolder=window.chooseFolderDirect;
   window.chooseFolderDirect=function(id,name){
@@ -4260,7 +4559,7 @@ body.dark-mode #sidebarPlusDock{background:#202c33;border-color:#33434d}
   const oldUpload=uploadVideoToDrive;
   uploadVideoToDrive=async function(file,number,onProgress,personNameOverride){
     const active=window.takrirActiveCurator||'';
-    if(!active)throw new Error('Адегенде «Куратор» бөлүмүнөн куратор тандаңыз.');
+    if(!active)throw new Error('Адегенде «Кураторлор» бөлүмүнөн куратор тандаңыз.');
     const folder=getSelectedFolder();
     if(!folder?.id)throw new Error('Бул куратор үчүн Google Drive папкасын Настройкадан тандаңыз.');
     // uploadVideoToDrive негизги функциясында appProperties.curator кошулсун.
@@ -4268,6 +4567,7 @@ body.dark-mode #sidebarPlusDock{background:#202c33;border-color:#33434d}
     try{return await oldUpload(file,number,onProgress,personNameOverride);}
     finally{window.takrirUploadingCurator='';}
   };
+
   // Сакталган файлга кураторду кошобуз жана синхрондоштурууда Drive метадайындарын окуйбуз.
   const oldRegister=registerVideo;
   registerVideo=async function(){
@@ -4308,8 +4608,14 @@ body.dark-mode #sidebarPlusDock{background:#202c33;border-color:#33434d}
     box.appendChild(section);
   };
 
+  // Google аккаунт жүктөлгөндөн кийин да тандалган куратор сакталып калышы үчүн
+  const oldUpdateUI=window.updateUserUI;
+  window.updateUserUI=function(){
+    if(typeof oldUpdateUI==='function')oldUpdateUI();
+    renderCuratorSelect();
+  };
+
   // Google Drive'дан келген маалыматтарда да куратор сакталсын.
-  const sourceText=document.documentElement;
   document.addEventListener('DOMContentLoaded',ensureCuratorUI);
   if(document.readyState!=='loading')ensureCuratorUI();
   window.addEventListener('load',ensureCuratorUI);
